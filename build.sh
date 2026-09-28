@@ -1,5 +1,6 @@
 #!/bin/bash
-# Usage: ./build.sh            build build/DayStack.app and the installer build/DayStack.dmg
+# Usage: ./build.sh            build build/DayStack.app, the installer build/DayStack.dmg, and the signed
+#                              update build/DayStack.zip + build/version.json (attach all three to a GitHub release)
 #        ./build.sh --publish  also copy both into the shared iCloud group folder (Update button + installer for new friends)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -78,6 +79,14 @@ hdiutil create -quiet -volname "DayStack" -srcfolder "$STAGE" -ov -format UDZO "
 rm -rf "$STAGE"
 echo "Built $DMG"
 
+# Signed update package: the app's Update button accepts it from the iCloud group or GitHub releases.
+ZIP=build/DayStack.zip
+rm -f "$ZIP"
+ditto -c -k --keepParent "$APP" "$ZIP"
+SIG=$(swift scripts/sign-update.swift sign "$ZIP")
+printf '{"version":"%s","signature":"%s"}\n' "$VERSION" "$SIG" > build/version.json
+echo "Built $ZIP + build/version.json (signed)"
+
 if [[ "${1:-}" == "--publish" ]]; then
     GROUP=$(defaults read com.seokhoon.daystack groupPath 2>/dev/null) || {
         echo "No group yet: create or join a group in the app first." >&2
@@ -85,13 +94,9 @@ if [[ "${1:-}" == "--publish" ]]; then
     }
     mkdir -p "$GROUP/updates"
     rm -f "$GROUP/updates/DayStack.zip"
-    ZIP=build/DayStack.zip
-    rm -f "$ZIP"
-    ditto -c -k --keepParent "$APP" "$ZIP"
-    SIG=$(swift scripts/sign-update.swift sign "$ZIP")
     cp "$ZIP" "$GROUP/updates/DayStack.zip"
     # Written last so friends never see a version whose zip isn't there yet.
-    printf '{"version":"%s","signature":"%s"}\n' "$VERSION" "$SIG" > "$GROUP/updates/version.json"
+    cp build/version.json "$GROUP/updates/version.json"
     cp "$DMG" "$GROUP/Install DayStack.dmg"
     echo "Published v$VERSION to $GROUP (updates/ and Install DayStack.dmg)"
 fi

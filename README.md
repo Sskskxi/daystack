@@ -44,7 +44,7 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 - **Quick to-dos:** click a day, type, press ⏎. Double-click a to-do to edit it; hover to delete.
 - **Today at a glance:** today's to-dos and anything left unfinished from earlier days are shown under the calendar.
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
-- **Updates:** an **Update** button appears when a new version is published to your group.
+- **Updates:** **Settings → Check for updates** installs new versions from GitHub or your group in one click. DayStack also checks by itself.
 - **Settings** (gear button): heatmap color, week start, language, alerts (Reminders sync), open at login, Claude connection, and Quit.
 - **English and Korean:** follows your Mac's language, or pick one in **Settings → Language**.
 - Light and dark mode.
@@ -138,6 +138,6 @@ Requires the Xcode Command Line Tools (`xcode-select --install`).
 ./build.sh --publish  # also copies the update + installer into your iCloud group folder
 ```
 
-To release a new version, bump the number in `VERSION`, run `./build.sh`, and attach `build/DayStack.dmg` to a new GitHub release.
+To release a new version, bump the number in `VERSION`, run `./build.sh`, and attach **`build/DayStack.dmg`, `build/DayStack.zip` and `build/version.json`** to a new GitHub release. The last two let everyone's **Settings → Check for updates** find and install it.
 
 The first build creates an update-signing key at `~/Library/Application Support/DayStack-Publisher/update-signing.key`. **Back it up and never share it**; without it, friends' apps won't accept your updates.

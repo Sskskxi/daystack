@@ -304,6 +304,10 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(sync.installing)
+                } else {
+                    Button(sync.checking ? L("Checking…") : L("Check for updates")) { sync.checkForUpdates() }
+                        .controlSize(.small)
+                        .disabled(sync.checking)
                 }
                 Spacer()
                 Button(L("Quit DayStack")) { NSApp.terminate(nil) }

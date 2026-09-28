@@ -25,7 +25,9 @@ final class SyncService: ObservableObject {
     @Published private(set) var status: String?
     @Published private(set) var busy = false
     @Published private(set) var lastRefresh: Date?
-    @Published private(set) var latestVersion: String?
+    @Published private(set) var groupUpdate: VersionInfo?
+    @Published private(set) var githubUpdate: VersionInfo?
+    @Published private(set) var checking = false
     @Published private(set) var updateMessage: String?
     @Published private(set) var installing = false
     @Published var name: String {
@@ -68,6 +70,12 @@ final class SyncService: ObservableObject {
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.publish() }
             .store(in: &bag)
+
+        Timer.publish(every: 6 * 60 * 60, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.checkGitHub(manual: false) }
+            .store(in: &bag)
+        checkGitHub(manual: false)
 
         Timer.publish(every: 20, on: .main, in: .common)
             .autoconnect()
@@ -124,6 +132,7 @@ final class SyncService: ObservableObject {
         code = nil
         friends = []
         status = nil
+        groupUpdate = nil
         UserDefaults.standard.removeObject(forKey: "groupPath")
     }
 
@@ -199,18 +208,40 @@ final class SyncService: ObservableObject {
         return try? Curve25519.Signing.PublicKey(rawRepresentation: raw)
     }()
 
-    var updateAvailable: Bool {
-        guard let latestVersion else { return false }
-        return Self.isNewer(latestVersion)
+    /// Where the newest signed update was announced: the shared group folder or GitHub releases.
+    enum UpdateSource { case group, github }
+
+    struct VersionInfo: Codable, Equatable {
+        var version: String
+        var signature: String?
     }
+
+    /// Latest release assets; each release carries DayStack.zip and a signed version.json.
+    private static let releaseBase = URL(string: "https://github.com/Sskskxi/daystack/releases/latest/download/")!
+
+    private var best: (info: VersionInfo, source: UpdateSource)? {
+        let candidates = [(groupUpdate, UpdateSource.group), (githubUpdate, UpdateSource.github)]
+            .compactMap { info, source in info.map { ($0, source) } }
+            .filter { Self.isNewer($0.0.version) }
+        // Prefer the group copy on a tie: it's already on disk.
+        return candidates.max { a, b in
+            let order = a.0.version.compare(b.0.version, options: .numeric)
+            return order == .orderedAscending || (order == .orderedSame && a.1 == .group)
+        }
+    }
+
+    var latestVersion: String? { best?.info.version }
+
+    var updateAvailable: Bool { best != nil }
 
     private static func isNewer(_ version: String) -> Bool {
         version.compare(currentVersion, options: .numeric) == .orderedDescending
     }
 
-    private struct VersionInfo: Codable {
-        var version: String
-        var signature: String?
+    /// Unsigned announcements are ignored outright, so nobody can make the button appear with a fake file.
+    private static func acceptable(_ info: VersionInfo?) -> VersionInfo? {
+        guard updatePublicKey != nil, let info, info.signature != nil else { return nil }
+        return info
     }
 
     private func readVersionInfo(_ updates: URL) -> VersionInfo? {
@@ -225,77 +256,120 @@ final class SyncService: ObservableObject {
             try? fm.startDownloadingUbiquitousItem(at: file)
             return
         }
-        // Unsigned announcements are ignored outright, so nobody can make the button appear with a fake file.
-        guard Self.updatePublicKey != nil, let info = readVersionInfo(updates), info.signature != nil else {
-            latestVersion = nil
-            return
-        }
-        latestVersion = info.version
-        if updateAvailable {
+        groupUpdate = Self.acceptable(readVersionInfo(updates))
+        if let info = groupUpdate, Self.isNewer(info.version) {
             try? fm.startDownloadingUbiquitousItem(at: updates.appendingPathComponent("DayStack.zip"))
         }
     }
 
+    /// Asks GitHub for the latest release's version.json. `manual` reports "up to date" and errors.
+    func checkGitHub(manual: Bool) {
+        guard !checking else { return }
+        checking = true
+        if manual { updateMessage = nil }
+        Task {
+            defer { checking = false }
+            do {
+                let data = try await Self.download(Self.releaseBase.appendingPathComponent("version.json"), limit: 10_000)
+                githubUpdate = Self.acceptable(try JSONDecoder().decode(VersionInfo.self, from: data))
+                if manual && !updateAvailable { updateMessage = L("DayStack is up to date.") }
+            } catch let e as NSError where e.code == 404 {
+                // Releases published before update files were attached have no version.json.
+                githubUpdate = nil
+                if manual { updateMessage = L("DayStack is up to date.") }
+            } catch {
+                if manual { updateMessage = L("Couldn't check for updates: %@", error.localizedDescription) }
+            }
+        }
+    }
+
+    func checkForUpdates() {
+        if let group = groupURL { checkForUpdate(group) }
+        checkGitHub(manual: true)
+    }
+
+    private static func download(_ url: URL, limit: Int) async throws -> Data {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        request.setValue("DayStack/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw NSError(domain: "DayStack", code: code, userInfo: [NSLocalizedDescriptionKey: L("No update information found.")])
+        }
+        guard data.count <= limit else { throw error(L("The update package is incomplete.")) }
+        return data
+    }
+
     func installUpdate() {
-        guard let group = groupURL, !installing else { return }
+        guard !installing, let (info, source) = best else { return }
         let current = Bundle.main.bundleURL
         guard current.pathExtension == "app" else {
             updateMessage = L("Updates only work when running DayStack.app.")
             return
         }
-        let updates = group.appendingPathComponent("updates", isDirectory: true)
-        let zip = updates.appendingPathComponent("DayStack.zip")
-        guard fm.fileExists(atPath: zip.path) else {
-            try? fm.startDownloadingUbiquitousItem(at: zip)
-            updateMessage = L("Downloading the update from iCloud… try again in a moment.")
-            return
-        }
 
         installing = true
         updateMessage = L("Installing update…")
-        do {
-            // Verify the exact bytes we then unpack, so the file can't be swapped between check and use.
-            guard let key = Self.updatePublicKey,
-                  let info = readVersionInfo(updates),
-                  let sig = info.signature.flatMap({ Data(base64Encoded: $0) }),
-                  let zipData = readSmallFile(zip, limit: 200_000_000),
-                  key.isValidSignature(sig, for: zipData)
-            else {
-                throw Self.error(L("This update isn't signed by the DayStack publisher, so it wasn't installed. If it was just published, it may still be syncing; try again in a minute."))
+        Task {
+            do {
+                let zipData: Data
+                switch source {
+                case .group:
+                    guard let group = groupURL else { throw Self.error(L("The update package is incomplete.")) }
+                    let zip = group.appendingPathComponent("updates/DayStack.zip")
+                    guard let data = readSmallFile(zip, limit: 200_000_000) else {
+                        try? fm.startDownloadingUbiquitousItem(at: zip)
+                        throw Self.error(L("Downloading the update from iCloud… try again in a moment."))
+                    }
+                    zipData = data
+                case .github:
+                    zipData = try await Self.download(Self.releaseBase.appendingPathComponent("DayStack.zip"), limit: 200_000_000)
+                }
+                try install(zipData, signature: info.signature, replacing: current)
+            } catch {
+                installing = false
+                updateMessage = L("Update failed: %@", error.localizedDescription)
             }
-
-            let tmp = fm.temporaryDirectory.appendingPathComponent("DayStack-update-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-            let verifiedZip = tmp.appendingPathComponent("update.zip")
-            try zipData.write(to: verifiedZip)
-            let unpacked = tmp.appendingPathComponent("unpacked", isDirectory: true)
-            try Self.run("/usr/bin/ditto", ["-x", "-k", verifiedZip.path, unpacked.path])
-
-            let newApp = unpacked.appendingPathComponent("DayStack.app")
-            let isLink = (try? newApp.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink ?? true
-            guard fm.fileExists(atPath: newApp.path), !isLink,
-                  let plist = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")),
-                  plist["CFBundleIdentifier"] as? String == Bundle.main.bundleIdentifier,
-                  let newVersion = plist["CFBundleShortVersionString"] as? String
-            else {
-                throw Self.error(L("The update package is incomplete."))
-            }
-            // Refuse downgrades: an old (validly signed) build could reintroduce fixed bugs.
-            guard Self.isNewer(newVersion) else {
-                throw Self.error(L("This update is not newer than the installed version."))
-            }
-            try? Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", newApp.path])
-            _ = try fm.replaceItemAt(current, withItemAt: newApp)
-
-            let relaunch = Process()
-            relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
-            relaunch.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", current.path]
-            try relaunch.run()
-            NSApp.terminate(nil)
-        } catch {
-            installing = false
-            updateMessage = L("Update failed: %@", error.localizedDescription)
         }
+    }
+
+    /// Verifies the exact bytes it then unpacks, so the file can't be swapped between check and use.
+    private func install(_ zipData: Data, signature: String?, replacing current: URL) throws {
+        guard let key = Self.updatePublicKey,
+              let sig = signature.flatMap({ Data(base64Encoded: $0) }),
+              key.isValidSignature(sig, for: zipData)
+        else {
+            throw Self.error(L("This update isn't signed by the DayStack publisher, so it wasn't installed. If it was just published, it may still be syncing; try again in a minute."))
+        }
+
+        let tmp = fm.temporaryDirectory.appendingPathComponent("DayStack-update-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let verifiedZip = tmp.appendingPathComponent("update.zip")
+        try zipData.write(to: verifiedZip)
+        let unpacked = tmp.appendingPathComponent("unpacked", isDirectory: true)
+        try Self.run("/usr/bin/ditto", ["-x", "-k", verifiedZip.path, unpacked.path])
+
+        let newApp = unpacked.appendingPathComponent("DayStack.app")
+        let isLink = (try? newApp.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink ?? true
+        guard fm.fileExists(atPath: newApp.path), !isLink,
+              let plist = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")),
+              plist["CFBundleIdentifier"] as? String == Bundle.main.bundleIdentifier,
+              let newVersion = plist["CFBundleShortVersionString"] as? String
+        else {
+            throw Self.error(L("The update package is incomplete."))
+        }
+        // Refuse downgrades: an old (validly signed) build could reintroduce fixed bugs.
+        guard Self.isNewer(newVersion) else {
+            throw Self.error(L("This update is not newer than the installed version."))
+        }
+        try? Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", newApp.path])
+        _ = try fm.replaceItemAt(current, withItemAt: newApp)
+
+        let relaunch = Process()
+        relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunch.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", current.path]
+        try relaunch.run()
+        NSApp.terminate(nil)
     }
 
     private static func error(_ message: String) -> NSError {

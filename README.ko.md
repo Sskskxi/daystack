@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | 
 - **빠른 할 일 추가:** 날짜를 클릭하고 입력한 뒤 ⏎ 또는 **+** 버튼. 할 일을 더블클릭하면 수정, 마우스를 올리면 수정·삭제 버튼이 나타납니다.
 - **오늘 한눈에 보기:** 캘린더 아래에 오늘 할 일과 이전에 못 끝낸 할 일이 표시됩니다.
 - **친구:** 공유 iCloud Drive 폴더로 친구와 할 일 목록·히트맵을 함께 봐요.
-- **업데이트:** 새 버전이 나오면 **Update** 버튼이 나타납니다.
+- **업데이트:** **설정 → 업데이트 확인**으로 GitHub이나 그룹의 새 버전을 한 번에 설치해요. 자동으로도 확인해요.
 - **설정**(톱니바퀴 버튼): 히트맵 색상, 한 주의 시작 요일, 언어, 알림(미리 알림 동기화), 로그인 시 열기, Claude 연결, 종료.
 - **한국어와 영어:** Mac 언어를 자동으로 따르고, **설정 → 언어**에서 직접 고를 수도 있어요.
 - 라이트 모드와 다크 모드를 모두 지원합니다.
@@ -138,6 +138,6 @@ Xcode 명령어 도구가 필요해요 (`xcode-select --install`).
 ./build.sh --publish  # 업데이트 파일과 설치 파일을 iCloud 그룹 폴더에도 복사합니다
 ```
 
-새 버전을 배포하려면 `VERSION`의 숫자를 올리고 `./build.sh`를 실행한 뒤, `build/DayStack.dmg`를 새 GitHub 릴리스에 첨부하세요.
+새 버전을 배포하려면 `VERSION`의 숫자를 올리고 `./build.sh`를 실행한 뒤, **`build/DayStack.dmg`, `build/DayStack.zip`, `build/version.json`** 세 파일을 새 GitHub 릴리스에 첨부하세요. 뒤의 두 파일이 있어야 모두의 **설정 → 업데이트 확인**에서 새 버전을 찾아 설치할 수 있어요.
 
 처음 빌드할 때 `~/Library/Application Support/DayStack-Publisher/update-signing.key`에 업데이트 서명 키가 만들어져요. **꼭 백업하고 절대 공유하지 마세요.** 이 키가 없으면 친구들의 앱이 업데이트를 받아들이지 않아요.
