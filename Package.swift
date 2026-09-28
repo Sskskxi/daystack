@@ -5,6 +5,8 @@ let package = Package(
     name: "DayStack",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "DayStack", path: "Sources/DayStack")
+        .target(name: "DayStackCore", path: "Sources/DayStackCore"),
+        .executableTarget(name: "DayStack", dependencies: ["DayStackCore"], path: "Sources/DayStack"),
+        .executableTarget(name: "daystack-mcp", dependencies: ["DayStackCore"], path: "Sources/daystack-mcp"),
     ]
 )

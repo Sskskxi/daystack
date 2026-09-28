@@ -1,87 +1,49 @@
+import DayStackCore
 import Foundation
-
-struct Todo: Identifiable, Codable, Equatable {
-    var id = UUID()
-    var title: String
-    var day: String
-    var done = false
-    var createdAt = Date()
-}
-
-enum Day {
-    static let cal: Calendar = {
-        var c = Calendar.current
-        c.firstWeekday = 2
-        return c
-    }()
-
-    private static let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.calendar = Calendar(identifier: .gregorian)
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func key(_ date: Date) -> String { formatter.string(from: date) }
-
-    static func date(_ key: String) -> Date? { formatter.date(from: key) }
-
-    static var mondayFirstSymbols: [String] {
-        let s = cal.veryShortWeekdaySymbols
-        return Array(s[1...]) + [s[0]]
-    }
-}
-
-extension Array where Element == Todo {
-    func on(_ date: Date) -> [Todo] {
-        let k = Day.key(date)
-        return filter { $0.day == k }
-    }
-
-    var doneByDay: [String: Int] {
-        reduce(into: [:]) { acc, t in if t.done { acc[t.day, default: 0] += 1 } }
-    }
-
-    var daysWithItems: Set<String> { Set(map(\.day)) }
-}
 
 final class TodoStore: ObservableObject {
     @Published private(set) var todos: [Todo] = []
-    private let url: URL
+    private var watcher: DispatchSourceFileSystemObject?
     private var dayObserver: NSObjectProtocol?
 
     init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("DayStack", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        url = dir.appendingPathComponent("todos.json")
+        let fm = FileManager.default
+        try? fm.createDirectory(at: TodoFile.directory, withIntermediateDirectories: true)
+        do {
+            todos = try TodoFile.load()
+        } catch {
+            // Keep the unreadable file instead of overwriting it on the next save.
+            let backup = TodoFile.directory.appendingPathComponent("todos.corrupt-\(Int(Date().timeIntervalSince1970)).json")
+            try? fm.moveItem(at: TodoFile.url, to: backup)
+            NSLog("DayStack: could not read todos.json, moved to \(backup.lastPathComponent): \(error)")
+        }
 
         // "Today" is computed at render time, so redraw the menu bar count and calendar when the date rolls over.
         dayObserver = NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { [weak self] _ in
             self?.objectWillChange.send()
         }
-
-        guard let data = try? Data(contentsOf: url) else { return }
-        do {
-            todos = try JSONDecoder().decode([Todo].self, from: data)
-        } catch {
-            // Keep the unreadable file instead of overwriting it on the next save.
-            let backup = dir.appendingPathComponent("todos.corrupt-\(Int(Date().timeIntervalSince1970)).json")
-            try? FileManager.default.moveItem(at: url, to: backup)
-            NSLog("DayStack: could not read todos.json, moved to \(backup.lastPathComponent): \(error)")
-        }
+        watchForExternalChanges()
     }
 
-    func items(on date: Date) -> [Todo] {
-        let k = Day.key(date)
-        return todos.filter { $0.day == k }
+    /// Picks up edits made by the MCP server (e.g. Claude adding a to-do) while the app is running.
+    private func watchForExternalChanges() {
+        let fd = open(TodoFile.directory.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+        source.setEventHandler { [weak self] in self?.reloadFromDisk() }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        watcher = source
     }
 
-    func openCount(on date: Date) -> Int {
-        let k = Day.key(date)
-        return todos.filter { $0.day == k && !$0.done }.count
+    private func reloadFromDisk() {
+        guard let latest = try? TodoFile.load(), latest != todos else { return }
+        todos = latest
     }
+
+    func items(on date: Date) -> [Todo] { todos.on(date) }
+
+    func openCount(on date: Date) -> Int { todos.on(date).filter { !$0.done }.count }
 
     var doneByDay: [String: Int] { todos.doneByDay }
 
@@ -90,32 +52,34 @@ final class TodoStore: ObservableObject {
     func add(_ title: String, on date: Date) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        todos.append(Todo(title: t, day: Day.key(date)))
-        save()
+        apply { $0.append(Todo(title: t, day: Day.key(date))) }
     }
 
     func toggle(_ id: UUID) {
-        guard let i = todos.firstIndex(where: { $0.id == id }) else { return }
-        todos[i].done.toggle()
-        save()
+        apply { todos in
+            guard let i = todos.firstIndex(where: { $0.id == id }) else { return }
+            todos[i].done.toggle()
+            todos[i].modifiedAt = Date()
+        }
     }
 
     func rename(_ id: UUID, to title: String) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty, let i = todos.firstIndex(where: { $0.id == id }) else { return }
-        todos[i].title = t
-        save()
+        guard !t.isEmpty else { return }
+        apply { todos in
+            guard let i = todos.firstIndex(where: { $0.id == id }) else { return }
+            todos[i].title = t
+            todos[i].modifiedAt = Date()
+        }
     }
 
     func delete(_ id: UUID) {
-        todos.removeAll { $0.id == id }
-        save()
+        apply { $0.removeAll { $0.id == id } }
     }
 
-    private func save() {
+    func apply(_ change: (inout [Todo]) -> Void) {
         do {
-            let data = try JSONEncoder().encode(todos)
-            try data.write(to: url, options: .atomic)
+            todos = try TodoFile.mutate(change)
         } catch {
             NSLog("DayStack: save failed: \(error)")
         }

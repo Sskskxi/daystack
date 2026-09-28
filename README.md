@@ -28,6 +28,36 @@ A tiny calendar + to-do list that lives in your Mac's menu bar, with a black-and
 - **Updates:** an **Update** button appears when a new version is published to your group.
 - **Launch at login**, light and dark mode.
 
+## Apple Reminders sync
+
+Tick **Reminders** at the bottom of the panel and allow access when macOS asks. DayStack creates a **DayStack** list in Reminders and keeps it in two-way sync:
+
+- To-dos you add in DayStack appear in Reminders, on your iPhone too via iCloud.
+- Reminders you add, complete, rename, reschedule or delete in the DayStack list come back into DayStack.
+- Your other Reminders lists are never touched.
+
+## Ask Claude to plan for you (MCP)
+
+DayStack ships with a small MCP server, so Claude can read and edit your to-dos. Just say things like *"add a plan: dentist tomorrow at 3pm"* or *"plan my study schedule for this week in DayStack"*.
+
+**Claude Code:**
+```bash
+claude mcp add --scope user daystack -- /Applications/DayStack.app/Contents/MacOS/daystack-mcp
+```
+
+**Claude Desktop:** add this to `~/Library/Application Support/Claude/claude_desktop_config.json`, then restart Claude:
+```json
+{
+  "mcpServers": {
+    "daystack": { "command": "/Applications/DayStack.app/Contents/MacOS/daystack-mcp" }
+  }
+}
+```
+
+Tools: `list_todos`, `add_todo`, `add_todos`, `update_todo`, `delete_todo`. Changes show up in the menu bar instantly.
+
+> ChatGPT's desktop app only supports MCP servers hosted on the internet, so it can't use this local server.
+
 ## Sharing with friends
 
 Everyone needs DayStack and iCloud Drive turned on.

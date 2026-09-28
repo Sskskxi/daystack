@@ -1,5 +1,6 @@
-import SwiftUI
+import DayStackCore
 import ServiceManagement
+import SwiftUI
 
 enum Shade {
     static func level(_ n: Int) -> Int { n == 0 ? 0 : n == 1 ? 1 : n <= 3 ? 2 : 3 }
@@ -451,11 +452,12 @@ struct IconButton: View {
 
 struct FooterBar: View {
     @EnvironmentObject var sync: SyncService
+    @EnvironmentObject var reminders: ReminderSync
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let msg = sync.updateMessage {
+            ForEach([sync.updateMessage, reminders.message].compactMap { $0 }, id: \.self) { msg in
                 Text(msg).font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -465,7 +467,11 @@ struct FooterBar: View {
 
     private var bar: some View {
         HStack(spacing: 8) {
-            Toggle("Launch at login", isOn: $launchAtLogin)
+            Toggle("Reminders", isOn: $reminders.enabled)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .help("Two-way sync with a \"DayStack\" list in Apple Reminders (iPhone too, via iCloud)")
+            Toggle("Open at login", isOn: $launchAtLogin)
                 .toggleStyle(.checkbox)
                 .font(.caption)
                 .onChange(of: launchAtLogin) { on in

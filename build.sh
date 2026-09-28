@@ -12,6 +12,7 @@ APP=build/DayStack.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/DayStack "$APP/Contents/MacOS/DayStack"
+cp .build/release/daystack-mcp "$APP/Contents/MacOS/daystack-mcp"
 
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -26,10 +27,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleVersion</key><string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSRemindersUsageDescription</key><string>DayStack syncs your to-dos with a "DayStack" list in Reminders.</string>
+    <key>NSRemindersFullAccessUsageDescription</key><string>DayStack syncs your to-dos with a "DayStack" list in Reminders.</string>
 </dict>
 </plist>
 EOF
 
+codesign --force --sign - "$APP/Contents/MacOS/daystack-mcp"
 codesign --force --sign - "$APP"
 echo "Built $APP (v$VERSION)"
 

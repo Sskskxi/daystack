@@ -1,3 +1,4 @@
+import DayStackCore
 import SwiftUI
 
 struct FriendsView: View {

@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import DayStackCore
 import Foundation
 
 struct Member: Codable, Identifiable {
