@@ -12,6 +12,7 @@ final class AlertScheduler: NSObject, ObservableObject, UNUserNotificationCenter
 
     private let store: TodoStore
     private let settings: AppSettings
+    private let reminders: ReminderSync
     private let center = UNUserNotificationCenter.current()
     private var bag = Set<AnyCancellable>()
 
@@ -20,15 +21,17 @@ final class AlertScheduler: NSObject, ObservableObject, UNUserNotificationCenter
     /// macOS keeps at most 64 pending notifications per app; leave room for the summaries.
     private static let maxTodoAlerts = 40
 
-    init(store: TodoStore, settings: AppSettings) {
+    init(store: TodoStore, settings: AppSettings, reminders: ReminderSync) {
         self.store = store
         self.settings = settings
+        self.reminders = reminders
         super.init()
         center.delegate = self
 
-        Publishers.Merge3(
+        Publishers.Merge4(
             store.$todos.map { _ in () },
             settings.objectWillChange.map { _ in () },
+            reminders.$enabled.map { _ in () },
             NotificationCenter.default.publisher(for: .NSCalendarDayChanged).map { _ in () }
         )
         .debounce(for: .seconds(1), scheduler: RunLoop.main)
@@ -63,9 +66,13 @@ final class AlertScheduler: NSObject, ObservableObject, UNUserNotificationCenter
 
         if settings.todoAlerts {
             let horizon = cal.date(byAdding: .day, value: Self.daysAhead, to: now)!
+            // A to-do already linked to a reminder rings through that reminder's alarm (Mac and iPhone),
+            // so skip ours to avoid a duplicate. Unlinked ones (sync off, pending or failing) still get ours.
+            let remindersHandle = reminders.enabled
             let timed = store.todos
                 .compactMap { t -> (Todo, Date)? in
                     guard !t.done, let at = t.alertDate, at > now, at < horizon else { return nil }
+                    if remindersHandle && t.reminderId != nil { return nil }
                     return (t, at)
                 }
                 .sorted { $0.1 < $1.1 }

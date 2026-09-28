@@ -280,6 +280,9 @@ struct SettingsView: View {
                 note(alerts.denied
                      ? L("Notifications are off for DayStack. Turn them on in System Settings → Notifications → DayStack.")
                      : L("Type a time in a to-do (\"3pm\", \"15:00\", \"오후 3시\") or use the clock button to get an alert."))
+                if reminders.enabled && settings.todoAlerts {
+                    note(L("Reminders sync is on, so time alerts ring through Apple Reminders on your Mac and iPhone (no duplicates). Summaries still come from DayStack."))
+                }
             }
 
             section(L("General")) {

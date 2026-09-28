@@ -125,6 +125,7 @@ enum L10n {
         "Notifications are off for DayStack. Turn them on in System Settings → Notifications → DayStack.": "DayStack 알림이 꺼져 있어요. 시스템 설정 → 알림 → DayStack에서 켜주세요.",
         "Type a time in a to-do (\"3pm\", \"15:00\", \"오후 3시\") or use the clock button to get an alert.": "할 일에 시간을 적거나 (\"오후 3시\", \"15:00\", \"3pm\") 시계 버튼을 눌러 알림을 받아요.",
         "Alert time": "알림 시간",
+        "Reminders sync is on, so time alerts ring through Apple Reminders on your Mac and iPhone (no duplicates). Summaries still come from DayStack.": "미리 알림 동기화가 켜져 있어서 시간 알림은 Apple 미리 알림으로 Mac과 iPhone에서 울려요 (중복 없음). 아침 요약과 저녁 알림은 DayStack이 보내요.",
         "Remove": "삭제",
         "Set": "설정",
         "DayStack to-do at %@": "DayStack 할 일 · %@",

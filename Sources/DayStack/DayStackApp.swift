@@ -15,11 +15,12 @@ struct DayStackApp: App {
         let settings = AppSettings()
         _settings = StateObject(wrappedValue: settings)
         let store = TodoStore()
+        let reminders = ReminderSync(store: store)
         _widget = StateObject(wrappedValue: WidgetExport(store: store, settings: settings))
-        _alerts = StateObject(wrappedValue: AlertScheduler(store: store, settings: settings))
+        _alerts = StateObject(wrappedValue: AlertScheduler(store: store, settings: settings, reminders: reminders))
         _store = StateObject(wrappedValue: store)
         _sync = StateObject(wrappedValue: SyncService(store: store))
-        _reminders = StateObject(wrappedValue: ReminderSync(store: store))
+        _reminders = StateObject(wrappedValue: reminders)
     }
 
     var body: some Scene {
