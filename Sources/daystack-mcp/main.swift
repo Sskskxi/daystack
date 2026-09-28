@@ -3,7 +3,10 @@ import Foundation
 
 // Minimal MCP server over stdio (newline-delimited JSON-RPC 2.0) exposing DayStack to-dos as tools.
 
-let serverVersion = "1.2.0"
+let serverVersion = "1.5.0"
+// Limits so a runaway or prompt-injected AI session can't flood the user's list.
+let maxTitleLength = 300
+let maxBatch = 50
 
 func log(_ s: String) {
     FileHandle.standardError.write(Data("daystack-mcp: \(s)\n".utf8))
@@ -129,6 +132,7 @@ func toolDefinitions() -> [[String: Any]] {
 func cleanTitle(_ raw: Any?) throws -> String {
     let t = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !t.isEmpty else { throw ToolError(message: "Title can't be empty.") }
+    guard t.count <= maxTitleLength else { throw ToolError(message: "Title is too long (max \(maxTitleLength) characters).") }
     return t
 }
 
@@ -159,6 +163,7 @@ func callTool(_ name: String, _ args: [String: Any]) throws -> String {
 
     case "add_todos":
         guard let items = args["items"] as? [[String: Any]], !items.isEmpty else { throw ToolError(message: "'items' must be a non-empty array.") }
+        guard items.count <= maxBatch else { throw ToolError(message: "Too many items (max \(maxBatch) per call).") }
         let new = try items.map { Todo(title: try cleanTitle($0["title"]), day: try parseDate($0["date"], default: todayKey())) }
         try TodoFile.mutate { $0 += new }
         return "Added \(new.count) to-dos:\n" + new.map { "  " + describe($0) }.joined(separator: "\n")
@@ -228,7 +233,7 @@ func handle(_ msg: [String: Any]) {
 
 log("started, data at \(TodoFile.url.path)")
 while let line = readLine(strippingNewline: true) {
-    guard let data = line.data(using: .utf8),
+    guard line.utf8.count <= 1_000_000, let data = line.data(using: .utf8),
           let msg = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
     handle(msg)
 }

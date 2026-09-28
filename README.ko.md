@@ -46,6 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | 
 - **친구:** 공유 iCloud Drive 폴더로 친구와 할 일 목록·히트맵을 함께 봐요.
 - **업데이트:** 새 버전이 나오면 **Update** 버튼이 나타납니다.
 - **설정**(톱니바퀴 버튼): 히트맵 색상, 한 주의 시작 요일(월/일), 로그인 시 열기, 미리 알림 동기화, Claude 연결, 종료.
+- **한국어와 영어:** Mac 언어를 자동으로 따르고, **설정 → 언어**에서 직접 고를 수도 있어요.
 - 라이트 모드와 다크 모드를 모두 지원합니다.
 
 ## iPhone 홈 화면 위젯
@@ -112,6 +113,14 @@ claude mcp add --scope user daystack -- /Applications/DayStack.app/Contents/MacO
 
 할 일은 내 Mac의 `~/Library/Application Support/DayStack/todos.json`에 저장돼요. 그룹에 참여하면 친구가 볼 수 있도록 공유 iCloud 폴더에도 사본이 저장됩니다. 그 밖의 곳으로는 아무것도 보내지 않아요.
 
+## 보안
+
+- **서명된 업데이트:** 업데이트 버튼은 배포자의 개인 키로 서명된 업데이트만 설치하고, 이전 버전으로 되돌리는 설치는 거부해요. 다른 사람이 공유 폴더에 넣은 파일은 무시돼요.
+- **강화된 런타임:** 다른 프로그램이 DayStack에 코드를 주입하지 못하도록 macOS가 막아줘요.
+- **친구 데이터 검사:** 친구의 파일은 크기를 제한하고 길이를 잘라서 표시해요.
+- **Claude 제한:** MCP 서버는 제목 길이와 한 번에 추가할 수 있는 할 일 개수를 제한해요.
+- **네트워크 서버, 계정, 추적이 없어요.** 데이터는 내 Mac과 내가 공유하기로 한 iCloud 폴더에만 있어요.
+
 ## 소스에서 빌드하기
 
 Xcode 명령어 도구가 필요해요 (`xcode-select --install`).
@@ -122,3 +131,5 @@ Xcode 명령어 도구가 필요해요 (`xcode-select --install`).
 ```
 
 새 버전을 배포하려면 `VERSION`의 숫자를 올리고 `./build.sh`를 실행한 뒤, `build/DayStack.dmg`를 새 GitHub 릴리스에 첨부하세요.
+
+처음 빌드할 때 `~/Library/Application Support/DayStack-Publisher/update-signing.key`에 업데이트 서명 키가 만들어져요. **꼭 백업하고 절대 공유하지 마세요.** 이 키가 없으면 친구들의 앱이 업데이트를 받아들이지 않아요.

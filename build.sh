@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 VERSION=$(tr -d '[:space:]' < VERSION)
+# The app only installs updates signed with the matching private key (kept outside the repo).
+UPDATE_PUBKEY=$(swift scripts/sign-update.swift pubkey)
 
 swift build -c release
 
@@ -29,14 +31,26 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleVersion</key><string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>DSUpdatePublicKey</key><string>${UPDATE_PUBKEY}</string>
     <key>NSRemindersUsageDescription</key><string>DayStack syncs your to-dos with a "DayStack" list in Reminders.</string>
     <key>NSRemindersFullAccessUsageDescription</key><string>DayStack syncs your to-dos with a "DayStack" list in Reminders.</string>
 </dict>
 </plist>
 EOF
 
-codesign --force --sign - "$APP/Contents/MacOS/daystack-mcp"
-codesign --force --sign - "$APP"
+# Hardened runtime blocks code injection (e.g. DYLD_INSERT_LIBRARIES) into the app and the MCP server.
+ENT=build/DayStack.entitlements
+cat > "$ENT" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.personal-information.calendars</key><true/>
+</dict>
+</plist>
+EOF
+codesign --force --options runtime --sign - "$APP/Contents/MacOS/daystack-mcp"
+codesign --force --options runtime --entitlements "$ENT" --sign - "$APP"
 echo "Built $APP (v$VERSION)"
 
 DMG=build/DayStack.dmg
@@ -71,9 +85,13 @@ if [[ "${1:-}" == "--publish" ]]; then
     }
     mkdir -p "$GROUP/updates"
     rm -f "$GROUP/updates/DayStack.zip"
-    ditto -c -k --keepParent "$APP" "$GROUP/updates/DayStack.zip"
+    ZIP=build/DayStack.zip
+    rm -f "$ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+    SIG=$(swift scripts/sign-update.swift sign "$ZIP")
+    cp "$ZIP" "$GROUP/updates/DayStack.zip"
     # Written last so friends never see a version whose zip isn't there yet.
-    printf '{"version":"%s"}\n' "$VERSION" > "$GROUP/updates/version.json"
+    printf '{"version":"%s","signature":"%s"}\n' "$VERSION" "$SIG" > "$GROUP/updates/version.json"
     cp "$DMG" "$GROUP/Install DayStack.dmg"
     echo "Published v$VERSION to $GROUP (updates/ and Install DayStack.dmg)"
 fi

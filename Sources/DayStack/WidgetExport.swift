@@ -73,6 +73,7 @@ final class WidgetExport: ObservableObject {
         let json: [String: Any] = [
             "updated": ISO8601DateFormatter().string(from: Date()),
             "weekStart": settings.weekStart,
+            "lang": L10n.isKorean ? "ko" : "en",
             "tint": settings.tintHex ?? NSNull(),
             "done": done,
             "todos": todos,
@@ -157,7 +158,7 @@ final class WidgetExport: ObservableObject {
       box.layoutVertically()
       box.spacing = 3
       const head = box.addStack()
-      const title = head.addText("Today")
+      const title = head.addText(tr("Today", "오늘"))
       title.font = Font.semiboldSystemFont(fontSize)
       title.textColor = fg
       head.addSpacer()
@@ -165,7 +166,7 @@ final class WidgetExport: ObservableObject {
       count.font = Font.mediumMonospacedSystemFont(fontSize - 1)
       count.textColor = dim
       if (items.length === 0) {
-        const t = box.addText("Nothing planned")
+        const t = box.addText(tr("Nothing planned", "계획 없음"))
         t.font = Font.systemFont(fontSize - 1)
         t.textColor = dim
       }
@@ -176,7 +177,7 @@ final class WidgetExport: ObservableObject {
         t.lineLimit = 1
       }
       if (items.length > max) {
-        const more = box.addText("+" + (items.length - max) + " more")
+        const more = box.addText(tr("+" + (items.length - max) + " more", "+" + (items.length - max) + "개 더"))
         more.font = Font.systemFont(fontSize - 2)
         more.textColor = dim
       }
@@ -189,6 +190,8 @@ final class WidgetExport: ObservableObject {
     }
 
     const data = await load()
+    const KO = data ? data.lang === "ko" : Device.language().startsWith("ko")
+    function tr(en, ko) { return KO ? ko : en }
     const family = config.widgetFamily || "medium"
     const w = new ListWidget()
     w.backgroundColor = bg
@@ -196,14 +199,15 @@ final class WidgetExport: ObservableObject {
     w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000)
 
     if (!data) {
-      const t = w.addText("Open DayStack on your Mac to set up this widget.")
+      const t = w.addText(tr("Open DayStack on your Mac to set up this widget.", "Mac에서 DayStack을 열어 위젯을 설정하세요."))
       t.font = Font.systemFont(12)
       t.textColor = dim
     } else if (family === "small") {
       heatmap(w, data, 8, 12, 3)
       w.addSpacer()
       const items = todayItems(data)
-      const t = w.addText(items.filter(i => i.d).length + "/" + items.length + " today")
+      const done = items.filter(i => i.d).length + "/" + items.length
+      const t = w.addText(tr(done + " today", "오늘 " + done))
       t.font = Font.semiboldSystemFont(12)
       t.textColor = fg
     } else if (family === "large") {

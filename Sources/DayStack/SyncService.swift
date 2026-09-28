@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CryptoKit
 import DayStackCore
 import Foundation
 
@@ -90,7 +91,7 @@ final class SyncService: ObservableObject {
             status = nil
             connect(dir, code: code)
         } catch {
-            status = "Couldn't create the group folder: \(error.localizedDescription)"
+            status = L("Couldn't create the group folder: %@", error.localizedDescription)
         }
     }
 
@@ -98,7 +99,7 @@ final class SyncService: ObservableObject {
         let code = raw.uppercased().filter { !$0.isWhitespace }
         guard !busy, !code.isEmpty, ensureICloud() else { return }
         busy = true
-        status = "Looking for the shared folder…"
+        status = L("Looking for the shared folder…")
         Task {
             // Freshly accepted shares may still be placeholders, so give iCloud a few seconds to download group.json.
             for _ in 0..<8 {
@@ -111,7 +112,7 @@ final class SyncService: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
             busy = false
-            status = "No shared folder with code \(code) found. Accept your friend's iCloud folder invite first, then try again."
+            status = L("No shared folder with code %@ found. Accept your friend's iCloud folder invite first, then try again.", code)
         }
     }
 
@@ -129,7 +130,7 @@ final class SyncService: ObservableObject {
     func publish() {
         guard let group = groupURL, let dir = membersDir else { return }
         guard fm.fileExists(atPath: group.path) else {
-            status = "The shared group folder is gone (deleted or no longer shared). Leave the group and join again."
+            status = L("The shared group folder is gone (deleted or no longer shared). Leave the group and join again.")
             return
         }
         let trimmed = name.trimmingCharacters(in: .whitespaces)
@@ -138,7 +139,7 @@ final class SyncService: ObservableObject {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             try JSONEncoder().encode(me).write(to: dir.appendingPathComponent("\(memberId).json"), options: .atomic)
         } catch {
-            status = "Couldn't save to the shared folder: \(error.localizedDescription)"
+            status = L("Couldn't save to the shared folder: %@", error.localizedDescription)
         }
     }
 
@@ -157,26 +158,65 @@ final class SyncService: ObservableObject {
             guard file.hasSuffix(".json"), file != "\(memberId).json" else { continue }
             let url = dir.appendingPathComponent(file)
             try? fm.startDownloadingUbiquitousItem(at: url)
-            guard let data = try? Data(contentsOf: url),
-                  let member = try? JSONDecoder().decode(Member.self, from: data)
+            guard let data = readSmallFile(url),
+                  let member = try? JSONDecoder().decode(Member.self, from: data),
+                  "\(member.id).json" == file
             else { continue }
-            found.append(member)
+            found.append(Self.sanitized(member))
         }
         friends = found.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         lastRefresh = Date()
         checkForUpdate(group)
     }
 
+    // MARK: - Friends' data (untrusted)
+
+    /// Anyone in the group can write to the shared folder, so cap what we read from it.
+    private func readSmallFile(_ url: URL, limit: Int = 2_000_000) -> Data? {
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= limit else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    private static func sanitized(_ m: Member) -> Member {
+        var m = m
+        m.name = String(m.name.prefix(40))
+        m.todos = m.todos.prefix(5000).map { t in
+            var t = t
+            t.title = String(t.title.prefix(300))
+            return t
+        }
+        return m
+    }
+
     // MARK: - Updates
 
     static let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
+    /// Only updates signed with the publisher's private key (see scripts/sign-update.swift) are installed.
+    private static let updatePublicKey: Curve25519.Signing.PublicKey? = {
+        guard let b64 = Bundle.main.object(forInfoDictionaryKey: "DSUpdatePublicKey") as? String,
+              let raw = Data(base64Encoded: b64) else { return nil }
+        return try? Curve25519.Signing.PublicKey(rawRepresentation: raw)
+    }()
+
     var updateAvailable: Bool {
         guard let latestVersion else { return false }
-        return latestVersion.compare(Self.currentVersion, options: .numeric) == .orderedDescending
+        return Self.isNewer(latestVersion)
     }
 
-    private struct VersionInfo: Codable { var version: String }
+    private static func isNewer(_ version: String) -> Bool {
+        version.compare(currentVersion, options: .numeric) == .orderedDescending
+    }
+
+    private struct VersionInfo: Codable {
+        var version: String
+        var signature: String?
+    }
+
+    private func readVersionInfo(_ updates: URL) -> VersionInfo? {
+        guard let data = readSmallFile(updates.appendingPathComponent("version.json"), limit: 10_000) else { return nil }
+        return try? JSONDecoder().decode(VersionInfo.self, from: data)
+    }
 
     private func checkForUpdate(_ group: URL) {
         let updates = group.appendingPathComponent("updates", isDirectory: true)
@@ -185,8 +225,11 @@ final class SyncService: ObservableObject {
             try? fm.startDownloadingUbiquitousItem(at: file)
             return
         }
-        guard let data = try? Data(contentsOf: file),
-              let info = try? JSONDecoder().decode(VersionInfo.self, from: data) else { return }
+        // Unsigned announcements are ignored outright, so nobody can make the button appear with a fake file.
+        guard Self.updatePublicKey != nil, let info = readVersionInfo(updates), info.signature != nil else {
+            latestVersion = nil
+            return
+        }
         latestVersion = info.version
         if updateAvailable {
             try? fm.startDownloadingUbiquitousItem(at: updates.appendingPathComponent("DayStack.zip"))
@@ -197,25 +240,49 @@ final class SyncService: ObservableObject {
         guard let group = groupURL, !installing else { return }
         let current = Bundle.main.bundleURL
         guard current.pathExtension == "app" else {
-            updateMessage = "Updates only work when running DayStack.app."
+            updateMessage = L("Updates only work when running DayStack.app.")
             return
         }
-        let zip = group.appendingPathComponent("updates/DayStack.zip")
+        let updates = group.appendingPathComponent("updates", isDirectory: true)
+        let zip = updates.appendingPathComponent("DayStack.zip")
         guard fm.fileExists(atPath: zip.path) else {
             try? fm.startDownloadingUbiquitousItem(at: zip)
-            updateMessage = "Downloading the update from iCloud… try again in a moment."
+            updateMessage = L("Downloading the update from iCloud… try again in a moment.")
             return
         }
 
         installing = true
-        updateMessage = "Installing update…"
+        updateMessage = L("Installing update…")
         do {
+            // Verify the exact bytes we then unpack, so the file can't be swapped between check and use.
+            guard let key = Self.updatePublicKey,
+                  let info = readVersionInfo(updates),
+                  let sig = info.signature.flatMap({ Data(base64Encoded: $0) }),
+                  let zipData = readSmallFile(zip, limit: 200_000_000),
+                  key.isValidSignature(sig, for: zipData)
+            else {
+                throw Self.error(L("This update isn't signed by the DayStack publisher, so it wasn't installed. If it was just published, it may still be syncing; try again in a minute."))
+            }
+
             let tmp = fm.temporaryDirectory.appendingPathComponent("DayStack-update-\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-            try Self.run("/usr/bin/ditto", ["-x", "-k", zip.path, tmp.path])
-            let newApp = tmp.appendingPathComponent("DayStack.app")
-            guard fm.fileExists(atPath: newApp.path) else {
-                throw NSError(domain: "DayStack", code: 1, userInfo: [NSLocalizedDescriptionKey: "The update package is incomplete."])
+            let verifiedZip = tmp.appendingPathComponent("update.zip")
+            try zipData.write(to: verifiedZip)
+            let unpacked = tmp.appendingPathComponent("unpacked", isDirectory: true)
+            try Self.run("/usr/bin/ditto", ["-x", "-k", verifiedZip.path, unpacked.path])
+
+            let newApp = unpacked.appendingPathComponent("DayStack.app")
+            let isLink = (try? newApp.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink ?? true
+            guard fm.fileExists(atPath: newApp.path), !isLink,
+                  let plist = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")),
+                  plist["CFBundleIdentifier"] as? String == Bundle.main.bundleIdentifier,
+                  let newVersion = plist["CFBundleShortVersionString"] as? String
+            else {
+                throw Self.error(L("The update package is incomplete."))
+            }
+            // Refuse downgrades: an old (validly signed) build could reintroduce fixed bugs.
+            guard Self.isNewer(newVersion) else {
+                throw Self.error(L("This update is not newer than the installed version."))
             }
             try? Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", newApp.path])
             _ = try fm.replaceItemAt(current, withItemAt: newApp)
@@ -227,8 +294,12 @@ final class SyncService: ObservableObject {
             NSApp.terminate(nil)
         } catch {
             installing = false
-            updateMessage = "Update failed: \(error.localizedDescription)"
+            updateMessage = L("Update failed: %@", error.localizedDescription)
         }
+    }
+
+    private static func error(_ message: String) -> NSError {
+        NSError(domain: "DayStack", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     private static func run(_ tool: String, _ args: [String]) throws {
@@ -284,13 +355,13 @@ final class SyncService: ObservableObject {
             }
             return nil
         }
-        guard let data = try? Data(contentsOf: file) else { return nil }
+        guard let data = readSmallFile(file, limit: 10_000) else { return nil }
         return try? JSONDecoder().decode(GroupInfo.self, from: data)
     }
 
     private func ensureICloud() -> Bool {
         if fm.fileExists(atPath: Self.iCloudRoot.path) { return true }
-        status = "iCloud Drive is off. Turn it on in System Settings → Apple Account → iCloud → iCloud Drive."
+        status = L("iCloud Drive is off. Turn it on in System Settings → Apple Account → iCloud → iCloud Drive.")
         return false
     }
 

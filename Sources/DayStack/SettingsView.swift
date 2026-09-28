@@ -38,11 +38,25 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var language: AppLanguage {
+        didSet {
+            UserDefaults.standard.set(language.rawValue, forKey: "language")
+            Self.applyLanguage(language)
+        }
+    }
+
     init() {
         let d = UserDefaults.standard
         heatColor = d.string(forKey: "heatColor") ?? "grey"
         weekStart = d.integer(forKey: "weekStart") == 1 ? 1 : 2
+        language = AppLanguage(rawValue: d.string(forKey: "language") ?? "") ?? .auto
         Day.firstWeekday = weekStart
+        Self.applyLanguage(language)
+    }
+
+    private static func applyLanguage(_ language: AppLanguage) {
+        L10n.language = language
+        Day.locale = L10n.locale
     }
 
     var tint: Color { Self.heatColors.first { $0.id == heatColor }?.color ?? .primary }
@@ -84,7 +98,7 @@ enum ClaudeIntegration {
     }
 
     static func connectCode() throws {
-        guard let cli = claudeCLI else { throw message("Claude Code isn't installed.") }
+        guard let cli = claudeCLI else { throw message(L("Claude Code isn't installed.")) }
         if codeStatus() != .disconnected {
             _ = try? run(cli, ["mcp", "remove", "--scope", "user", "daystack"])
         }
@@ -110,7 +124,7 @@ enum ClaudeIntegration {
     private static func readDesktopConfig() throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: desktopConfig.path) else { return [:] }
         guard let json = try JSONSerialization.jsonObject(with: Data(contentsOf: desktopConfig)) as? [String: Any] else {
-            throw message("Claude Desktop's config file isn't valid JSON, so it was left untouched.")
+            throw message(L("Claude Desktop's config file isn't valid JSON, so it was left untouched."))
         }
         return json
     }
@@ -193,12 +207,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 4) {
                 IconButton("chevron.left", action: onBack)
-                Text("Settings").font(.headline)
+                Text(L("Settings")).font(.headline)
                 Spacer()
             }
 
-            section("Calendar") {
-                row("Heatmap color") {
+            section(L("Calendar")) {
+                row(L("Heatmap color")) {
                     HStack(spacing: 6) {
                         ForEach(AppSettings.heatColors) { c in
                             Button { settings.heatColor = c.id } label: {
@@ -209,23 +223,33 @@ struct SettingsView: View {
                                     .overlay(Circle().strokeBorder(Color.primary.opacity(settings.heatColor == c.id ? 0.9 : 0), lineWidth: 1.5))
                             }
                             .buttonStyle(.plain)
-                            .help(c.name)
+                            .help(L(c.name))
                         }
                     }
                 }
-                row("Week starts on") {
+                row(L("Week starts on")) {
                     Picker("", selection: $settings.weekStart) {
-                        Text("Monday").tag(2)
-                        Text("Sunday").tag(1)
+                        Text(L("Monday")).tag(2)
+                        Text(L("Sunday")).tag(1)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .frame(width: 150)
                 }
+                row(L("Language")) {
+                    Picker("", selection: $settings.language) {
+                        Text(L("Auto")).tag(AppLanguage.auto)
+                        Text("English").tag(AppLanguage.en)
+                        Text("한국어").tag(AppLanguage.ko)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 170)
+                }
             }
 
-            section("General") {
-                row("Open at login") {
+            section(L("General")) {
+                row(L("Open at login")) {
                     Toggle("", isOn: $launchAtLogin).labelsHidden().toggleStyle(.switch).controlSize(.mini)
                         .onChange(of: launchAtLogin) { on in
                             do {
@@ -236,20 +260,20 @@ struct SettingsView: View {
                             }
                         }
                 }
-                row("Sync with Reminders") {
+                row(L("Sync with Reminders")) {
                     Toggle("", isOn: $reminders.enabled).labelsHidden().toggleStyle(.switch).controlSize(.mini)
                 }
-                note("Two-way sync with a \"DayStack\" list in Apple Reminders, on your iPhone too.")
-                row("iPhone widget") {
+                note(L("Two-way sync with a \"DayStack\" list in Apple Reminders, on your iPhone too."))
+                row(L("iPhone widget")) {
                     if widget.available {
-                        Label("Ready", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
+                        Label(L("Ready"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Text("Needs Scriptable").font(.caption).foregroundStyle(.tertiary)
+                        Text(L("Needs Scriptable")).font(.caption).foregroundStyle(.tertiary)
                     }
                 }
                 note(widget.available
-                     ? "On your iPhone: add a Scriptable widget, long-press it → Edit Widget → Script: DayStack."
-                     : "Install the free Scriptable app on your iPhone (iCloud on), then come back here.")
+                     ? L("On your iPhone: add a Scriptable widget, long-press it → Edit Widget → Script: DayStack.")
+                     : L("Install the free Scriptable app on your iPhone (iCloud on), then come back here."))
             }
 
             section("Claude") {
@@ -257,7 +281,7 @@ struct SettingsView: View {
                           connect: ClaudeIntegration.connectCode, disconnect: ClaudeIntegration.disconnectCode)
                 claudeRow("Claude Desktop", status: desktopStatus,
                           connect: ClaudeIntegration.connectDesktop, disconnect: ClaudeIntegration.disconnectDesktop)
-                note(claudeMessage ?? "Lets Claude add and edit your to-dos, e.g. \"add a plan: gym tomorrow 7pm\".")
+                note(claudeMessage ?? L("Lets Claude add and edit your to-dos, e.g. \"add a plan: gym tomorrow 7pm\"."))
             }
 
             Spacer(minLength: 0)
@@ -265,13 +289,13 @@ struct SettingsView: View {
             HStack {
                 Text("DayStack v\(SyncService.currentVersion)").font(.caption).foregroundStyle(.secondary)
                 if sync.updateAvailable, let v = sync.latestVersion {
-                    Button("Update to \(v)") { sync.installUpdate() }
+                    Button(L("Update to %@", v)) { sync.installUpdate() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(sync.installing)
                 }
                 Spacer()
-                Button("Quit DayStack") { NSApp.terminate(nil) }
+                Button(L("Quit DayStack")) { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
                     .controlSize(.small)
             }
@@ -292,16 +316,16 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 switch status {
                 case .notInstalled:
-                    Text("Not installed").font(.caption).foregroundStyle(.tertiary)
+                    Text(L("Not installed")).font(.caption).foregroundStyle(.tertiary)
                 case .connected:
-                    Label("Connected", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
-                    Button("Disconnect") { perform(disconnect, done: nil) }.controlSize(.small)
+                    Label(L("Connected"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
+                    Button(L("Disconnect")) { perform(disconnect, done: nil) }.controlSize(.small)
                 case .outdated:
-                    Button("Reconnect") { perform(connect, done: name == "Claude Desktop" ? "Restart Claude Desktop to apply." : nil) }
+                    Button(L("Reconnect")) { perform(connect, done: name == "Claude Desktop" ? L("Restart Claude Desktop to apply.") : nil) }
                         .controlSize(.small)
-                        .help("DayStack moved since it was connected")
+                        .help(L("DayStack moved since it was connected"))
                 case .disconnected:
-                    Button("Connect") { perform(connect, done: name == "Claude Desktop" ? "Connected. Restart Claude Desktop to apply." : "Connected. Start a new Claude Code session to use it.") }
+                    Button(L("Connect")) { perform(connect, done: name == "Claude Desktop" ? L("Connected. Restart Claude Desktop to apply.") : L("Connected. Start a new Claude Code session to use it.")) }
                         .controlSize(.small)
                 }
             }
@@ -313,7 +337,7 @@ struct SettingsView: View {
             try action()
             claudeMessage = done
         } catch {
-            claudeMessage = "Couldn't update Claude: \(error.localizedDescription)"
+            claudeMessage = L("Couldn't update Claude: %@", error.localizedDescription)
         }
         refreshClaude()
     }

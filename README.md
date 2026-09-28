@@ -46,6 +46,7 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
 - **Updates:** an **Update** button appears when a new version is published to your group.
 - **Settings** (gear button): heatmap color, week starts on Monday or Sunday, open at login, Reminders sync, Claude connection, and Quit.
+- **English and Korean:** follows your Mac's language, or pick one in **Settings → Language**.
 - Light and dark mode.
 
 ## iPhone home screen widget
@@ -112,6 +113,14 @@ Friends' to-dos refresh every 20 seconds; iCloud may take up to a minute to sync
 
 To-dos are stored locally in `~/Library/Application Support/DayStack/todos.json`. When you're in a group, a copy is written to the shared iCloud folder so friends can see it. Nothing is sent anywhere else.
 
+## Security
+
+- **Signed updates:** the Update button only installs updates signed with the publisher's private key, and never an older version. A file dropped into the shared folder by anyone else is ignored.
+- **Hardened runtime:** macOS blocks other programs from injecting code into DayStack.
+- **Untrusted friend data:** friends' files are size-limited and trimmed before display.
+- **Claude limits:** the MCP server caps title length and how many to-dos can be added at once.
+- **No network server, no accounts, no tracking.** Your data stays on your Mac and in iCloud folders you choose to share.
+
 ## Building from source
 
 Requires the Xcode Command Line Tools (`xcode-select --install`).
@@ -122,3 +131,5 @@ Requires the Xcode Command Line Tools (`xcode-select --install`).
 ```
 
 To release a new version, bump the number in `VERSION`, run `./build.sh`, and attach `build/DayStack.dmg` to a new GitHub release.
+
+The first build creates an update-signing key at `~/Library/Application Support/DayStack-Publisher/update-signing.key`. **Back it up and never share it**; without it, friends' apps won't accept your updates.

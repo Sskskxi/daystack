@@ -13,11 +13,13 @@ struct FriendsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 IconButton("chevron.left", action: onBack)
-                Text("Friends").font(.headline)
+                Text(L("Friends")).font(.headline)
                 Spacer()
                 if sync.groupURL != nil {
                     if let last = sync.lastRefresh {
-                        (Text("Checked ") + Text(last, style: .relative) + Text(" ago"))
+                        (L10n.isKorean
+    ? Text(last, style: .relative) + Text(" 전 확인")
+    : Text("Checked ") + Text(last, style: .relative) + Text(" ago"))
                             .font(.caption2).foregroundStyle(.tertiary)
                     }
                     Button {
@@ -31,13 +33,13 @@ struct FriendsView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Refresh")
+                    .help(L("Refresh"))
                 }
             }
 
             HStack {
-                Text("Your name").font(.caption).foregroundStyle(.secondary)
-                TextField("Name", text: $sync.name).textFieldStyle(.roundedBorder)
+                Text(L("Your name")).font(.caption).foregroundStyle(.secondary)
+                TextField(L("Name"), text: $sync.name).textFieldStyle(.roundedBorder)
             }
 
             if sync.groupURL == nil { setup } else { group }
@@ -54,18 +56,18 @@ struct FriendsView: View {
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Share your to-dos with friends through a shared iCloud Drive folder.")
+            Text(L("Share your to-dos with friends through a shared iCloud Drive folder."))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Create a group") { sync.createGroup() }
+            Button(L("Create a group")) { sync.createGroup() }
             Divider().padding(.vertical, 2)
             HStack {
-                TextField("Invite code", text: $joinCode)
+                TextField(L("Invite code"), text: $joinCode)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(join)
-                Button("Join", action: join).disabled(joinCode.isEmpty || sync.busy)
+                Button(L("Join"), action: join).disabled(joinCode.isEmpty || sync.busy)
             }
-            Text("To join, first accept your friend's iCloud folder invite, then enter their code.")
+            Text(L("To join, first accept your friend's iCloud folder invite, then enter their code."))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -74,22 +76,22 @@ struct FriendsView: View {
     private var group: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text("Invite code").font(.caption).foregroundStyle(.secondary)
+                Text(L("Invite code")).font(.caption).foregroundStyle(.secondary)
                 Text(sync.code ?? "……")
                     .font(.system(.body, design: .monospaced).weight(.semibold))
                     .textSelection(.enabled)
-                IconButton("doc.on.doc") { sync.copyCode() }.help("Copy code")
+                IconButton("doc.on.doc") { sync.copyCode() }.help(L("Copy code"))
                 Spacer()
-                Button("Share folder…") { sync.revealInFinder() }.font(.caption)
+                Button(L("Share folder…")) { sync.revealInFinder() }.font(.caption)
             }
-            Text("To invite: in Finder, right-click the DayStack folder → Share → invite your friend. Then send them the code.")
+            Text(L("To invite: in Finder, right-click the DayStack folder → Share → invite your friend. Then send them the code."))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 2)
 
             if sync.friends.isEmpty {
-                Text("No friends have joined yet.\nYour to-dos are shared. Friends appear here once they join with code \(sync.code ?? "…").")
+                Text(L("No friends have joined yet.\nYour to-dos are shared. Friends appear here once they join with code %@.", sync.code ?? "…"))
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -104,7 +106,7 @@ struct FriendsView: View {
                 }
             }
 
-            Button("Leave group") { sync.leave() }
+            Button(L("Leave group")) { sync.leave() }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -135,7 +137,7 @@ struct FriendRow: View {
                     .background(Circle().fill(Color.primary.opacity(0.8)))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(member.name).font(.system(size: 13, weight: .medium))
-                    Text("Today \(todays.filter(\.done).count)/\(todays.count) · \(member.updatedAt.formatted(.relative(presentation: .named)))")
+                    Text(L("Today %d/%d · %@", todays.filter(\.done).count, todays.count, member.updatedAt.relativeText))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -171,7 +173,7 @@ struct FriendView: View {
                 IconButton("chevron.left", action: onBack)
                 Text(member.name).font(.headline)
                 Spacer()
-                Text(month.formatted(.dateTime.year().month(.abbreviated)))
+                Text(month.fmt(.dateTime.year().month(.abbreviated)))
                     .font(.caption).foregroundStyle(.secondary)
                 IconButton("chevron.left") { shift(-1) }
                 IconButton("chevron.right") { shift(1) }
@@ -196,14 +198,14 @@ struct FriendDayView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 IconButton("chevron.left", action: onBack)
-                Text("\(member.name) · \(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))")
+                Text("\(member.name) · \(day.fmt(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))")
                     .font(.headline).lineLimit(1)
                 Spacer()
                 Text("\(items.filter(\.done).count) / \(items.count)")
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             if items.isEmpty {
-                Text("No to-dos this day.")
+                Text(L("No to-dos this day."))
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {

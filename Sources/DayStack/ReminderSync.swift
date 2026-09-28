@@ -66,11 +66,11 @@ final class ReminderSync: ObservableObject {
                     message = nil
                     sync()
                 } else {
-                    message = "Allow DayStack in System Settings → Privacy & Security → Reminders, then turn sync on again."
+                    message = L("Allow DayStack in System Settings → Privacy & Security → Reminders, then turn sync on again.")
                     enabled = false
                 }
             } catch {
-                message = "Couldn't access Reminders: \(error.localizedDescription)"
+                message = L("Couldn't access Reminders: %@", error.localizedDescription)
                 enabled = false
             }
         }
@@ -90,7 +90,7 @@ final class ReminderSync: ObservableObject {
                 try reconcile(reminders, list: list)
                 message = nil
             } catch {
-                message = "Reminders sync failed: \(error.localizedDescription)"
+                message = L("Reminders sync failed: %@", error.localizedDescription)
             }
             syncing = false
             if pending {
@@ -112,7 +112,7 @@ final class ReminderSync: ObservableObject {
         let cal = EKCalendar(for: .reminder, eventStore: ek)
         cal.title = Self.listTitle
         guard let source = ek.defaultCalendarForNewReminders()?.source ?? ek.sources.first(where: { $0.sourceType == .calDAV }) else {
-            throw NSError(domain: "DayStack", code: 2, userInfo: [NSLocalizedDescriptionKey: "No Reminders account found."])
+            throw NSError(domain: "DayStack", code: 2, userInfo: [NSLocalizedDescriptionKey: L("No Reminders account found.")])
         }
         cal.source = source
         try ek.saveCalendar(cal, commit: true)

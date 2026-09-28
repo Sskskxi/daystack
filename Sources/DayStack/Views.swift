@@ -78,11 +78,12 @@ struct RootView: View {
             .padding(14)
             // One fixed height for every screen; MenuBarExtra windows don't reliably shrink when content gets shorter.
             .frame(height: 500, alignment: .top)
-            // Rebuild date grids when the first day of the week changes.
-            .id(settings.weekStart)
             NoticeBar { screen = .settings }
         }
+        // Rebuild everything when the week start or language changes: dates and text are computed at render time.
+        .id("\(settings.weekStart)-\(settings.language.rawValue)")
         .frame(width: 320)
+        .environment(\.locale, L10n.locale)
         .environment(\.heatTint, settings.tint)
         .environment(\.heatStrongText, settings.strongText)
     }
@@ -104,23 +105,23 @@ struct CalendarPane: View {
         let done = store.doneByDay
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 1) {
-                Text(showWeeks ? "Last \(StackHeatmap.weeks) weeks" : month.formatted(.dateTime.year().month(.wide)))
+                Text(showWeeks ? L("Last %d weeks", StackHeatmap.weeks) : month.fmt(.dateTime.year().month(.wide)))
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 4)
                 if !showWeeks {
                     IconButton("chevron.left") { shift(-1) }
-                    Button("Today") { month = Date() }
+                    Button(L("Today")) { month = Date() }
                         .buttonStyle(.plain).font(.caption.weight(.medium))
                     IconButton("chevron.right") { shift(1) }
                 }
                 IconButton("person.2") { onFriends() }
-                    .help("Friends")
+                    .help(L("Friends"))
                 IconButton(showWeeks ? "calendar" : "square.grid.3x3.fill") { showWeeks.toggle() }
-                    .help(showWeeks ? "Month view" : "Stacked weeks view")
+                    .help(showWeeks ? L("Month view") : L("Stacked weeks view"))
                 IconButton("gearshape", action: onSettings)
-                    .help("Settings")
+                    .help(L("Settings"))
                     .overlay(alignment: .topTrailing) {
                         if sync.updateAvailable {
                             Circle().fill(Color.red).frame(width: 6, height: 6).offset(x: -2, y: 3)
@@ -135,13 +136,13 @@ struct CalendarPane: View {
             }
 
             HStack(spacing: 3) {
-                Text("\(doneCount(done)) done").font(.caption).foregroundStyle(.secondary)
+                Text(L("%d done", doneCount(done))).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Text("Less").font(.caption2).foregroundStyle(.secondary)
+                Text(L("Less")).font(.caption2).foregroundStyle(.secondary)
                 ForEach(0..<4, id: \.self) { l in
                     RoundedRectangle(cornerRadius: 2).fill(Shade.fill(l, tint: tint)).frame(width: 9, height: 9)
                 }
-                Text("More").font(.caption2).foregroundStyle(.secondary)
+                Text(L("More")).font(.caption2).foregroundStyle(.secondary)
             }
 
             TodoPreview(onOpen: onPick)
@@ -180,9 +181,9 @@ struct TodoPreview: View {
 
         VStack(alignment: .leading, spacing: 6) {
             Divider()
-            SectionHeader(title: "Today", detail: "\(todays.filter(\.done).count)/\(todays.count)") { onOpen(today) }
+            SectionHeader(title: L("Today"), detail: "\(todays.filter(\.done).count)/\(todays.count)") { onOpen(today) }
             if todays.isEmpty {
-                Text("Nothing planned today.")
+                Text(L("Nothing planned today."))
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
             }
@@ -192,12 +193,12 @@ struct TodoPreview: View {
                         TodoRow(todo: t, compact: true)
                     }
                     if !earlier.isEmpty {
-                        SectionHeader(title: "Unfinished earlier", detail: "\(earlier.count)", action: nil)
+                        SectionHeader(title: L("Unfinished earlier"), detail: "\(earlier.count)", action: nil)
                             .padding(.top, 8).padding(.bottom, 2)
                         ForEach(earlier) { t in
                             let date = Day.date(t.day) ?? today
                             TodoRow(todo: t, compact: true,
-                                    dateLabel: date.formatted(.dateTime.month(.abbreviated).day()),
+                                    dateLabel: date.fmt(.dateTime.month(.abbreviated).day()),
                                     onOpenDay: { onOpen(date) })
                         }
                     }
@@ -218,7 +219,7 @@ struct SectionHeader: View {
             Spacer()
             Text(detail).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             if let action {
-                IconButton("chevron.right", action: action).help("Open day")
+                IconButton("chevron.right", action: action).help(L("Open day"))
             }
         }
         .foregroundStyle(.secondary)
@@ -296,7 +297,7 @@ struct DayCell: View {
                     .padding(.bottom, 4)
                 }
             }
-            .help(items == 0 ? "" : items == 1 ? "1 to-do" : "\(items) to-dos")
+            .help(items == 0 ? "" : items == 1 ? L("1 to-do") : L("%d to-dos", items))
             .frame(height: 30)
             .contentShape(Rectangle())
             .opacity(inMonth ? 1 : 0.35)
@@ -348,7 +349,7 @@ struct StackHeatmap: View {
                                     .frame(width: size, height: size)
                             }
                             .buttonStyle(.plain)
-                            .help("\(d.formatted(.dateTime.month(.abbreviated).day())): \(n) done")
+                            .help(L("%@: %d done", d.fmt(.dateTime.month(.abbreviated).day()), n))
                         }
                     }
                 }
@@ -375,10 +376,10 @@ struct DayView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 IconButton("chevron.left", action: onBack)
-                Text(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                Text(day.fmt(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
                     .font(.headline)
                 if Day.cal.isDateInToday(day) {
-                    Text("Today").font(.caption).foregroundStyle(.secondary)
+                    Text(L("Today")).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Text("\(doneCount) / \(items.count)")
@@ -386,7 +387,7 @@ struct DayView: View {
             }
 
             HStack(spacing: 6) {
-                TextField("Add a to-do…", text: $draft)
+                TextField(L("Add a to-do…"), text: $draft)
                     .textFieldStyle(.roundedBorder)
                     .focused($addFocused)
                     .onSubmit(addDraft)
@@ -400,11 +401,11 @@ struct DayView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isDraftEmpty)
-                .help("Add")
+                .help(L("Add"))
             }
 
             if items.isEmpty {
-                Text("Nothing yet. Type above and press ⏎.")
+                Text(L("Nothing yet. Type above and press ⏎."))
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {
@@ -470,15 +471,15 @@ struct TodoRow: View {
             }
 
             if hover && !editing {
-                IconButton("pencil", action: beginEdit).help("Edit")
-                IconButton("trash") { store.delete(todo.id) }.help("Delete")
+                IconButton("pencil", action: beginEdit).help(L("Edit"))
+                IconButton("trash") { store.delete(todo.id) }.help(L("Delete"))
             }
             if let dateLabel, !editing {
                 Button { onOpenDay?() } label: {
                     Text(dateLabel).font(.caption2).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Open this day")
+                .help(L("Open this day"))
             }
         }
         .frame(minHeight: 22)
@@ -539,9 +540,9 @@ struct NoticeBar: View {
                 }
                 if sync.updateAvailable, let v = sync.latestVersion {
                     HStack {
-                        Text("DayStack \(v) is available").font(.caption)
+                        Text(L("DayStack %@ is available", v)).font(.caption)
                         Spacer()
-                        Button("Update") { sync.installUpdate() }
+                        Button(L("Update")) { sync.installUpdate() }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
                             .disabled(sync.installing)

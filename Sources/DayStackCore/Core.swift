@@ -26,14 +26,20 @@ public struct Todo: Identifiable, Codable, Equatable {
 public enum Day {
     /// 1 = Sunday, 2 = Monday.
     public static var firstWeekday = 2 {
-        didSet { cal = makeCalendar(firstWeekday) }
+        didSet { cal = makeCalendar() }
     }
 
-    public private(set) static var cal = makeCalendar(2)
+    /// Language used for weekday symbols.
+    public static var locale = Locale.current {
+        didSet { cal = makeCalendar() }
+    }
 
-    private static func makeCalendar(_ firstWeekday: Int) -> Calendar {
+    public private(set) static var cal = makeCalendar()
+
+    private static func makeCalendar() -> Calendar {
         var c = Calendar.current
         c.firstWeekday = firstWeekday
+        c.locale = locale
         return c
     }
 
