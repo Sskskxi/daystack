@@ -36,7 +36,10 @@ final class ReminderSync: ObservableObject {
         store.$todos
             .dropFirst()
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.sync() }
+            .sink { [weak self] _ in
+                self?.enableForAlertsIfNeeded()
+                self?.sync()
+            }
             .store(in: &bag)
 
         NotificationCenter.default.publisher(for: .EKEventStoreChanged, object: ek)
@@ -44,7 +47,26 @@ final class ReminderSync: ObservableObject {
             .sink { [weak self] _ in self?.sync() }
             .store(in: &bag)
 
-        if enabled { start() }
+        if enabled { start() } else { enableForAlertsIfNeeded() }
+    }
+
+    /// Alerts are delivered only as Reminders alarms, so a timed to-do switches sync on,
+    /// unless the user turned it off themselves (or denied access).
+    private var optedOut: Bool {
+        get { UserDefaults.standard.bool(forKey: "remindersOptOut") }
+        set { UserDefaults.standard.set(newValue, forKey: "remindersOptOut") }
+    }
+
+    func setEnabledByUser(_ on: Bool) {
+        optedOut = !on
+        enabled = on
+    }
+
+    private func enableForAlertsIfNeeded() {
+        guard !enabled, !optedOut,
+              store.todos.contains(where: { $0.time != nil && !$0.done && $0.reminderId == nil })
+        else { return }
+        enabled = true
     }
 
     private var authorized: Bool {
@@ -67,6 +89,7 @@ final class ReminderSync: ObservableObject {
                     sync()
                 } else {
                     message = L("Allow DayStack in System Settings → Privacy & Security → Reminders, then turn sync on again.")
+                    optedOut = true
                     enabled = false
                 }
             } catch {

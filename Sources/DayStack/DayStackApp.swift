@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct DayStackApp: App {
@@ -7,7 +8,6 @@ struct DayStackApp: App {
     @StateObject private var reminders: ReminderSync
     @StateObject private var settings: AppSettings
     @StateObject private var widget: WidgetExport
-    @StateObject private var alerts: AlertScheduler
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
@@ -17,7 +17,8 @@ struct DayStackApp: App {
         let store = TodoStore()
         let reminders = ReminderSync(store: store)
         _widget = StateObject(wrappedValue: WidgetExport(store: store, settings: settings))
-        _alerts = StateObject(wrappedValue: AlertScheduler(store: store, settings: settings, reminders: reminders))
+        // Alerts now come only from Reminders; drop anything 1.6.x scheduled itself.
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         _store = StateObject(wrappedValue: store)
         _sync = StateObject(wrappedValue: SyncService(store: store))
         _reminders = StateObject(wrappedValue: reminders)
@@ -31,7 +32,6 @@ struct DayStackApp: App {
                 .environmentObject(reminders)
                 .environmentObject(settings)
                 .environmentObject(widget)
-                .environmentObject(alerts)
         } label: {
             MenuLabel(store: store)
         }

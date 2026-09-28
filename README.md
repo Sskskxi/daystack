@@ -45,17 +45,17 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 - **Today at a glance:** today's to-dos and anything left unfinished from earlier days are shown under the calendar.
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
 - **Updates:** an **Update** button appears when a new version is published to your group.
-- **Settings** (gear button): heatmap color, week starts on Monday or Sunday, open at login, Reminders sync, Claude connection, and Quit.
+- **Settings** (gear button): heatmap color, week start, language, alerts (Reminders sync), open at login, Claude connection, and Quit.
 - **English and Korean:** follows your Mac's language, or pick one in **Settings → Language**.
 - Light and dark mode.
 
 ## Alerts
 
-- **Time alerts:** type a time in a to-do, like *"3pm Dentist"*, *"15:30 meeting"* or *"오후 3시 치과"*, or hover a to-do and click 🕒. You get a Mac notification at that time. With Reminders sync on, the alert comes from Apple Reminders instead, so it rings on your Mac *and* iPhone, only once.
-- **Morning summary:** a notification each morning with the day's to-dos (9:00 by default). Mac only.
-- **Evening nudge:** a notification in the evening only if something is still open (21:00 by default).
+Alerts ring through **Apple Reminders**, so they reach your Mac **and** iPhone (and Apple Watch).
 
-Turn each one on or off and change the times in **Settings → Alerts**. Allow notifications when macOS asks.
+- Give a to-do a time: type it in the title, like *"3pm Dentist"*, *"15:30 meeting"* or *"오후 3시 치과"*, or hover the to-do and click 🕒.
+- DayStack turns on **Sync with Reminders** automatically (allow access when macOS asks). The to-do becomes a reminder with an alarm in a **DayStack** list.
+- You can switch it off in **Settings → Alerts**. Times are still shown, but nothing rings.
 
 ## iPhone home screen widget
 
@@ -70,7 +70,7 @@ Sizes: small shows the heatmap, medium adds today's to-dos, and large shows 18 w
 
 ## Apple Reminders sync
 
-Open **Settings** (gear button), turn on **Sync with Reminders**, and allow access when macOS asks. DayStack creates a **DayStack** list in Reminders and keeps it in two-way sync:
+It turns on automatically when you give a to-do a time, or open **Settings → Alerts** and turn on **Sync with Reminders**. Allow access when macOS asks. DayStack creates a **DayStack** list in Reminders and keeps it in two-way sync:
 
 - To-dos you add in DayStack appear in Reminders, on your iPhone too via iCloud.
 - Reminders you add, complete, rename, reschedule or delete in the DayStack list come back into DayStack.
