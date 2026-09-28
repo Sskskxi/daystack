@@ -1,0 +1,494 @@
+import SwiftUI
+import ServiceManagement
+
+enum Shade {
+    static func level(_ n: Int) -> Int { n == 0 ? 0 : n == 1 ? 1 : n <= 3 ? 2 : 3 }
+    static func fill(_ level: Int) -> Color {
+        Color.primary.opacity([0.07, 0.28, 0.55, 0.9][level])
+    }
+}
+
+enum Screen: Equatable {
+    case calendar
+    case day(Date)
+    case friends
+    case friend(String)
+    case friendDay(String, Date)
+}
+
+struct RootView: View {
+    @EnvironmentObject var sync: SyncService
+    @State private var screen = Screen.calendar
+    @State private var month = Date()
+    @State private var showWeeks = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Group {
+                switch screen {
+                case .calendar:
+                    CalendarPane(month: $month, showWeeks: $showWeeks,
+                                 onPick: { screen = .day($0) },
+                                 onFriends: { screen = .friends })
+                case .day(let day):
+                    DayView(day: day) { screen = .calendar }
+                case .friends:
+                    FriendsView(onBack: { screen = .calendar }, onOpen: { screen = .friend($0) })
+                case .friend(let id):
+                    if let m = sync.friends.first(where: { $0.id == id }) {
+                        FriendView(member: m, onBack: { screen = .friends }, onPick: { screen = .friendDay(id, $0) })
+                    } else {
+                        FriendsView(onBack: { screen = .calendar }, onOpen: { screen = .friend($0) })
+                    }
+                case .friendDay(let id, let day):
+                    if let m = sync.friends.first(where: { $0.id == id }) {
+                        FriendDayView(member: m, day: day) { screen = .friend(id) }
+                    } else {
+                        FriendsView(onBack: { screen = .calendar }, onOpen: { screen = .friend($0) })
+                    }
+                }
+            }
+            .padding(14)
+            // One fixed height for every screen; MenuBarExtra windows don't reliably shrink when content gets shorter.
+            .frame(height: 470, alignment: .top)
+            Divider()
+            FooterBar().padding(.horizontal, 14).padding(.vertical, 8)
+        }
+        .frame(width: 320)
+    }
+}
+
+// MARK: - Calendar
+
+struct CalendarPane: View {
+    @EnvironmentObject var store: TodoStore
+    @Binding var month: Date
+    @Binding var showWeeks: Bool
+    let onPick: (Date) -> Void
+    let onFriends: () -> Void
+
+    var body: some View {
+        let done = store.doneByDay
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 2) {
+                Text(showWeeks ? "Last \(StackHeatmap.weeks) weeks" : month.formatted(.dateTime.year().month(.wide)))
+                    .font(.headline)
+                Spacer()
+                if !showWeeks {
+                    IconButton("chevron.left") { shift(-1) }
+                    Button("Today") { month = Date() }
+                        .buttonStyle(.plain).font(.caption.weight(.medium))
+                    IconButton("chevron.right") { shift(1) }
+                }
+                IconButton("person.2") { onFriends() }
+                    .help("Friends")
+                IconButton(showWeeks ? "calendar" : "square.grid.3x3.fill") { showWeeks.toggle() }
+                    .help(showWeeks ? "Month view" : "Stacked weeks view")
+            }
+
+            if showWeeks {
+                StackHeatmap(done: done, onPick: onPick)
+            } else {
+                MonthGrid(month: month, done: done, hasItems: store.daysWithItems, onPick: onPick)
+            }
+
+            HStack(spacing: 3) {
+                Text("\(doneCount(done)) done").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text("Less").font(.caption2).foregroundStyle(.secondary)
+                ForEach(0..<4, id: \.self) { l in
+                    RoundedRectangle(cornerRadius: 2).fill(Shade.fill(l)).frame(width: 9, height: 9)
+                }
+                Text("More").font(.caption2).foregroundStyle(.secondary)
+            }
+
+            TodoPreview(onOpen: onPick)
+        }
+    }
+
+    private func shift(_ months: Int) {
+        month = Day.cal.date(byAdding: .month, value: months, to: month) ?? month
+    }
+
+    private func doneCount(_ done: [String: Int]) -> Int {
+        let cal = Day.cal
+        if showWeeks {
+            let today = cal.startOfDay(for: Date())
+            return (0..<(StackHeatmap.weeks * 7)).reduce(0) { sum, i in
+                let d = cal.date(byAdding: .day, value: -i, to: today)!
+                return sum + (done[Day.key(d)] ?? 0)
+            }
+        }
+        let prefix = String(Day.key(month).prefix(7))
+        return done.filter { $0.key.hasPrefix(prefix) }.values.reduce(0, +)
+    }
+}
+
+struct TodoPreview: View {
+    @EnvironmentObject var store: TodoStore
+    let onOpen: (Date) -> Void
+
+    var body: some View {
+        let today = Date()
+        let todayKey = Day.key(today)
+        let todays = store.items(on: today)
+        let earlier = store.todos
+            .filter { !$0.done && $0.day < todayKey }
+            .sorted { $0.day > $1.day }
+
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            SectionHeader(title: "Today", detail: "\(todays.filter(\.done).count)/\(todays.count)") { onOpen(today) }
+            if todays.isEmpty {
+                Text("Nothing planned today.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(todays) { t in
+                        TodoRow(todo: t, compact: true)
+                    }
+                    if !earlier.isEmpty {
+                        SectionHeader(title: "Unfinished earlier", detail: "\(earlier.count)", action: nil)
+                            .padding(.top, 8).padding(.bottom, 2)
+                        ForEach(earlier) { t in
+                            let date = Day.date(t.day) ?? today
+                            TodoRow(todo: t, compact: true,
+                                    dateLabel: date.formatted(.dateTime.month(.abbreviated).day()),
+                                    onOpenDay: { onOpen(date) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SectionHeader: View {
+    let title: String
+    let detail: String
+    let action: (() -> Void)?
+
+    var body: some View {
+        HStack {
+            Text(title).font(.caption.weight(.semibold))
+            Spacer()
+            Text(detail).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            if let action {
+                IconButton("chevron.right", action: action).help("Open day")
+            }
+        }
+        .foregroundStyle(.secondary)
+        .frame(height: 18)
+    }
+}
+
+struct MonthGrid: View {
+    let month: Date
+    let done: [String: Int]
+    let hasItems: Set<String>
+    let onPick: (Date) -> Void
+
+    private var days: [Date] {
+        let cal = Day.cal
+        let first = cal.date(from: cal.dateComponents([.year, .month], from: month))!
+        let offset = (cal.component(.weekday, from: first) + 5) % 7
+        return (0..<42).map { cal.date(byAdding: .day, value: $0 - offset, to: first)! }
+    }
+
+    var body: some View {
+        let cal = Day.cal
+        let symbols = Day.mondayFirstSymbols
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(0..<7, id: \.self) { i in
+                Text(symbols[i]).font(.caption2).foregroundStyle(.secondary)
+            }
+            ForEach(days, id: \.self) { d in
+                let key = Day.key(d)
+                DayCell(
+                    number: cal.component(.day, from: d),
+                    inMonth: cal.isDate(d, equalTo: month, toGranularity: .month),
+                    level: Shade.level(done[key] ?? 0),
+                    hasItems: hasItems.contains(key),
+                    isToday: cal.isDateInToday(d)
+                ) { onPick(d) }
+            }
+        }
+    }
+}
+
+struct DayCell: View {
+    let number: Int
+    let inMonth: Bool
+    let level: Int
+    let hasItems: Bool
+    let isToday: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5).fill(Shade.fill(level))
+                if isToday {
+                    RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary, lineWidth: 1.5)
+                }
+                Text("\(number)")
+                    .font(.system(size: 11, weight: isToday ? .bold : .regular))
+                    .foregroundStyle(level >= 2 ? Color(nsColor: .windowBackgroundColor) : Color.primary)
+            }
+            .overlay(alignment: .bottom) {
+                if hasItems && level == 0 {
+                    Circle().fill(Color.primary.opacity(0.5)).frame(width: 3, height: 3).padding(.bottom, 3)
+                }
+            }
+            .frame(height: 30)
+            .contentShape(Rectangle())
+            .opacity(inMonth ? 1 : 0.35)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct StackHeatmap: View {
+    static let weeks = 18
+    let done: [String: Int]
+    let onPick: (Date) -> Void
+
+    private let size: CGFloat = 11
+    private let gap: CGFloat = 3
+
+    var body: some View {
+        let cal = Day.cal
+        let today = cal.startOfDay(for: Date())
+        let thisWeek = cal.dateInterval(of: .weekOfYear, for: today)!.start
+        let start = cal.date(byAdding: .weekOfYear, value: -(Self.weeks - 1), to: thisWeek)!
+        let symbols = Day.mondayFirstSymbols
+
+        HStack(alignment: .top, spacing: gap) {
+            VStack(spacing: gap) {
+                ForEach(0..<7, id: \.self) { r in
+                    Text(r % 2 == 0 ? symbols[r] : "")
+                        .font(.system(size: 8)).foregroundStyle(.secondary)
+                        .frame(width: 10, height: size)
+                }
+            }
+            ForEach(0..<Self.weeks, id: \.self) { w in
+                VStack(spacing: gap) {
+                    ForEach(0..<7, id: \.self) { r in
+                        let d = cal.date(byAdding: .day, value: w * 7 + r, to: start)!
+                        let n = done[Day.key(d)] ?? 0
+                        if d > today {
+                            Color.clear.frame(width: size, height: size)
+                        } else {
+                            Button { onPick(d) } label: {
+                                RoundedRectangle(cornerRadius: 2.5)
+                                    .fill(Shade.fill(Shade.level(n)))
+                                    .overlay {
+                                        if cal.isDateInToday(d) {
+                                            RoundedRectangle(cornerRadius: 2.5).strokeBorder(Color.primary, lineWidth: 1)
+                                        }
+                                    }
+                                    .frame(width: size, height: size)
+                            }
+                            .buttonStyle(.plain)
+                            .help("\(d.formatted(.dateTime.month(.abbreviated).day())): \(n) done")
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Day
+
+struct DayView: View {
+    @EnvironmentObject var store: TodoStore
+    let day: Date
+    let onBack: () -> Void
+
+    @State private var draft = ""
+    @FocusState private var addFocused: Bool
+
+    var body: some View {
+        let items = store.items(on: day)
+        let doneCount = items.filter(\.done).count
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 4) {
+                IconButton("chevron.left", action: onBack)
+                Text(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                    .font(.headline)
+                if Day.cal.isDateInToday(day) {
+                    Text("Today").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(doneCount) / \(items.count)")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+
+            TextField("Add a to-do…", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .focused($addFocused)
+                .onSubmit {
+                    store.add(draft, on: day)
+                    draft = ""
+                    addFocused = true
+                }
+
+            if items.isEmpty {
+                Text("Nothing yet. Type above and press ⏎.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+            } else {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(items) { TodoRow(todo: $0) }
+                    }
+                }
+            }
+        }
+        .onAppear { DispatchQueue.main.async { addFocused = true } }
+        .onExitCommand(perform: onBack)
+    }
+}
+
+struct TodoRow: View {
+    @EnvironmentObject var store: TodoStore
+    let todo: Todo
+    var compact = false
+    var dateLabel: String? = nil
+    var onOpenDay: (() -> Void)? = nil
+
+    @State private var editing = false
+    @State private var text = ""
+    @State private var hover = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { store.toggle(todo.id) } label: {
+                Image(systemName: todo.done ? "checkmark.square.fill" : "square")
+                    .font(.system(size: compact ? 12 : 14))
+            }
+            .buttonStyle(.plain)
+
+            if editing {
+                TextField("", text: $text)
+                    .font(.system(size: compact ? 12 : 13))
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit(commit)
+                    .onExitCommand { editing = false }
+                    .onChange(of: focused) { f in if !f && editing { commit() } }
+                    .onAppear { DispatchQueue.main.async { focused = true } }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(todo.title)
+                    .font(.system(size: compact ? 12 : 13))
+                    .lineLimit(compact ? 1 : nil)
+                    .strikethrough(todo.done)
+                    .foregroundStyle(todo.done ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2, perform: beginEdit)
+            }
+
+            if hover && !editing {
+                IconButton("pencil", action: beginEdit).help("Edit")
+                IconButton("trash") { store.delete(todo.id) }.help("Delete")
+            }
+            if let dateLabel, !editing {
+                Button { onOpenDay?() } label: {
+                    Text(dateLabel).font(.caption2).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Open this day")
+            }
+        }
+        .frame(minHeight: 22)
+        .padding(.horizontal, 6)
+        .padding(.vertical, compact ? 1 : 2)
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(hover ? 0.06 : 0)))
+        .onHover { hover = $0 }
+    }
+
+    private func beginEdit() {
+        text = todo.title
+        editing = true
+    }
+
+    private func commit() {
+        store.rename(todo.id, to: text)
+        editing = false
+    }
+}
+
+// MARK: - Shared
+
+struct IconButton: View {
+    let name: String
+    let action: () -> Void
+
+    init(_ name: String, action: @escaping () -> Void) {
+        self.name = name
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: name)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct FooterBar: View {
+    @EnvironmentObject var sync: SyncService
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let msg = sync.updateMessage {
+                Text(msg).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            bar
+        }
+    }
+
+    private var bar: some View {
+        HStack(spacing: 8) {
+            Toggle("Launch at login", isOn: $launchAtLogin)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .onChange(of: launchAtLogin) { on in
+                    do {
+                        if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                    } catch {
+                        NSLog("DayStack: launch-at-login change failed: \(error)")
+                        launchAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+                }
+            Spacer()
+            if sync.updateAvailable, let v = sync.latestVersion {
+                Button("Update to \(v)") { sync.installUpdate() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(sync.installing)
+            } else {
+                Text("v\(SyncService.currentVersion)").font(.caption2).foregroundStyle(.tertiary)
+            }
+            Button("Quit") { NSApp.terminate(nil) }
+                .keyboardShortcut("q")
+                .buttonStyle(.plain)
+                .font(.caption)
+        }
+    }
+}
