@@ -47,7 +47,7 @@ final class TodoStore: ObservableObject {
 
     var doneByDay: [String: Int] { todos.doneByDay }
 
-    var daysWithItems: Set<String> { todos.daysWithItems }
+    var countByDay: [String: Int] { todos.countByDay }
 
     func add(_ title: String, on date: Date) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)

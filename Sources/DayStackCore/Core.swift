@@ -73,6 +73,10 @@ public extension Array where Element == Todo {
     }
 
     var daysWithItems: Set<String> { Set(map(\.day)) }
+
+    var countByDay: [String: Int] {
+        reduce(into: [:]) { acc, t in acc[t.day, default: 0] += 1 }
+    }
 }
 
 /// The on-disk to-do list, shared by the app and the MCP server. Every write is a locked read-modify-write

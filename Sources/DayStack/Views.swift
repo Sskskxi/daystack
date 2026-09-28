@@ -131,7 +131,7 @@ struct CalendarPane: View {
             if showWeeks {
                 StackHeatmap(done: done, onPick: onPick)
             } else {
-                MonthGrid(month: month, done: done, hasItems: store.daysWithItems, onPick: onPick)
+                MonthGrid(month: month, done: done, itemCounts: store.countByDay, onPick: onPick)
             }
 
             HStack(spacing: 3) {
@@ -229,7 +229,7 @@ struct SectionHeader: View {
 struct MonthGrid: View {
     let month: Date
     let done: [String: Int]
-    let hasItems: Set<String>
+    let itemCounts: [String: Int]
     let onPick: (Date) -> Void
 
     private var days: [Date] {
@@ -253,7 +253,7 @@ struct MonthGrid: View {
                     number: cal.component(.day, from: d),
                     inMonth: cal.isDate(d, equalTo: month, toGranularity: .month),
                     level: Shade.level(done[key] ?? 0),
-                    hasItems: hasItems.contains(key),
+                    items: itemCounts[key] ?? 0,
                     isToday: cal.isDateInToday(d)
                 ) { onPick(d) }
             }
@@ -265,13 +265,16 @@ struct DayCell: View {
     let number: Int
     let inMonth: Bool
     let level: Int
-    let hasItems: Bool
+    let items: Int
     let isToday: Bool
     let action: () -> Void
     @Environment(\.heatTint) private var tint
     @Environment(\.heatStrongText) private var strongText
 
+    private static let maxDots = 5
+
     var body: some View {
+        let ink = level >= 2 ? strongText : Color.primary
         Button(action: action) {
             ZStack {
                 RoundedRectangle(cornerRadius: 5).fill(Shade.fill(level, tint: tint))
@@ -280,13 +283,20 @@ struct DayCell: View {
                 }
                 Text("\(number)")
                     .font(.system(size: 11, weight: isToday ? .bold : .regular))
-                    .foregroundStyle(level >= 2 ? strongText : Color.primary)
+                    .foregroundStyle(ink)
+                    .offset(y: items > 0 ? -3 : 0)
             }
             .overlay(alignment: .bottom) {
-                if hasItems && level == 0 {
-                    Circle().fill(Color.primary.opacity(0.5)).frame(width: 3, height: 3).padding(.bottom, 3)
+                if items > 0 {
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(items, Self.maxDots), id: \.self) { _ in
+                            Circle().fill(ink.opacity(0.6)).frame(width: 3, height: 3)
+                        }
+                    }
+                    .padding(.bottom, 4)
                 }
             }
+            .help(items == 0 ? "" : items == 1 ? "1 to-do" : "\(items) to-dos")
             .frame(height: 30)
             .contentShape(Rectangle())
             .opacity(inMonth ? 1 : 0.35)

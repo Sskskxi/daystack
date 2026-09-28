@@ -176,7 +176,7 @@ struct FriendView: View {
                 IconButton("chevron.left") { shift(-1) }
                 IconButton("chevron.right") { shift(1) }
             }
-            MonthGrid(month: month, done: member.todos.doneByDay, hasItems: member.todos.daysWithItems, onPick: onPick)
+            MonthGrid(month: month, done: member.todos.doneByDay, itemCounts: member.todos.countByDay, onPick: onPick)
         }
         .onExitCommand(perform: onBack)
     }

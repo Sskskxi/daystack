@@ -2,6 +2,8 @@
 
 # DayStack
 
+**English** · [한국어](README.ko.md)
+
 A tiny calendar + to-do list that lives in your Mac's menu bar, with a black-and-grey activity heatmap and to-do sharing with friends.
 
 <p>
@@ -37,13 +39,14 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 
 ## Features
 
-- **Calendar:** each day is shaded grey → black by how many to-dos you finished that day.
+- **Calendar:** each day is shaded grey → black by how many to-dos you finished that day, with one small dot per to-do (up to 5).
 - **Stacked heatmap:** the grid button shows the last 18 weeks, GitHub-style.
 - **Quick to-dos:** click a day, type, press ⏎. Double-click a to-do to edit it; hover to delete.
 - **Today at a glance:** today's to-dos and anything left unfinished from earlier days are shown under the calendar.
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
 - **Updates:** an **Update** button appears when a new version is published to your group.
-- **Launch at login**, light and dark mode.
+- **Settings** (gear button): heatmap color, week starts on Monday or Sunday, open at login, Reminders sync, Claude connection, and Quit.
+- Light and dark mode.
 
 ## iPhone home screen widget
 
@@ -58,7 +61,7 @@ Sizes: small shows the heatmap, medium adds today's to-dos, and large shows 18 w
 
 ## Apple Reminders sync
 
-Tick **Reminders** at the bottom of the panel and allow access when macOS asks. DayStack creates a **DayStack** list in Reminders and keeps it in two-way sync:
+Open **Settings** (gear button), turn on **Sync with Reminders**, and allow access when macOS asks. DayStack creates a **DayStack** list in Reminders and keeps it in two-way sync:
 
 - To-dos you add in DayStack appear in Reminders, on your iPhone too via iCloud.
 - Reminders you add, complete, rename, reschedule or delete in the DayStack list come back into DayStack.
@@ -67,6 +70,10 @@ Tick **Reminders** at the bottom of the panel and allow access when macOS asks. 
 ## Ask Claude to plan for you (MCP)
 
 DayStack ships with a small MCP server, so Claude can read and edit your to-dos. Just say things like *"add a plan: dentist tomorrow at 3pm"* or *"plan my study schedule for this week in DayStack"*.
+
+**Easiest:** open **Settings** (gear button) and click **Connect** next to Claude Code or Claude Desktop. Restart Claude Desktop afterwards, or start a new Claude Code session.
+
+To set it up by hand instead:
 
 **Claude Code:**
 ```bash
