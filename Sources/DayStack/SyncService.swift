@@ -22,6 +22,7 @@ final class SyncService: ObservableObject {
     @Published private(set) var friends: [Member] = []
     @Published private(set) var status: String?
     @Published private(set) var busy = false
+    @Published private(set) var lastRefresh: Date?
     @Published private(set) var latestVersion: String?
     @Published private(set) var updateMessage: String?
     @Published private(set) var installing = false
@@ -152,13 +153,16 @@ final class SyncService: ObservableObject {
                 try? fm.startDownloadingUbiquitousItem(at: dir.appendingPathComponent(real))
                 continue
             }
-            guard file.hasSuffix(".json"), file != "\(memberId).json",
-                  let data = try? Data(contentsOf: dir.appendingPathComponent(file)),
+            guard file.hasSuffix(".json"), file != "\(memberId).json" else { continue }
+            let url = dir.appendingPathComponent(file)
+            try? fm.startDownloadingUbiquitousItem(at: url)
+            guard let data = try? Data(contentsOf: url),
                   let member = try? JSONDecoder().decode(Member.self, from: data)
             else { continue }
             found.append(member)
         }
         friends = found.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        lastRefresh = Date()
         checkForUpdate(group)
     }
 

@@ -6,6 +6,7 @@ struct FriendsView: View {
     let onOpen: (String) -> Void
 
     @State private var joinCode = ""
+    @State private var spin = 0.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -14,7 +15,22 @@ struct FriendsView: View {
                 Text("Friends").font(.headline)
                 Spacer()
                 if sync.groupURL != nil {
-                    IconButton("arrow.clockwise") { sync.refresh() }.help("Refresh")
+                    if let last = sync.lastRefresh {
+                        (Text("Checked ") + Text(last, style: .relative) + Text(" ago"))
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.6)) { spin += 360 }
+                        sync.refresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .rotationEffect(.degrees(spin))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh")
                 }
             }
 
@@ -72,8 +88,10 @@ struct FriendsView: View {
             Divider().padding(.vertical, 2)
 
             if sync.friends.isEmpty {
-                Text("No friends have joined yet.")
+                Text("No friends have joined yet.\nYour to-dos are shared. Friends appear here once they join with code \(sync.code ?? "…").")
                     .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 50)
             } else {
                 ScrollView {
