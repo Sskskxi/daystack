@@ -6,12 +6,15 @@ struct DayStackApp: App {
     @StateObject private var sync: SyncService
     @StateObject private var reminders: ReminderSync
     @StateObject private var settings: AppSettings
+    @StateObject private var widget: WidgetExport
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
         // Created first: it sets the calendar's first weekday that everything else uses.
-        _settings = StateObject(wrappedValue: AppSettings())
+        let settings = AppSettings()
+        _settings = StateObject(wrappedValue: settings)
         let store = TodoStore()
+        _widget = StateObject(wrappedValue: WidgetExport(store: store, settings: settings))
         _store = StateObject(wrappedValue: store)
         _sync = StateObject(wrappedValue: SyncService(store: store))
         _reminders = StateObject(wrappedValue: ReminderSync(store: store))
@@ -24,6 +27,7 @@ struct DayStackApp: App {
                 .environmentObject(sync)
                 .environmentObject(reminders)
                 .environmentObject(settings)
+                .environmentObject(widget)
         } label: {
             MenuLabel(store: store)
         }

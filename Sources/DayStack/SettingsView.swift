@@ -8,16 +8,22 @@ final class AppSettings: ObservableObject {
     struct HeatColor: Identifiable {
         let id: String
         let name: String
-        let color: Color
+        /// nil for grey, which follows light/dark mode instead of a fixed color.
+        let hex: String?
+
+        var color: Color {
+            guard let hex, let v = Int(hex.dropFirst(), radix: 16) else { return .primary }
+            return Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+        }
     }
 
     static let heatColors: [HeatColor] = [
-        HeatColor(id: "grey", name: "Grey", color: .primary),
-        HeatColor(id: "green", name: "Green", color: Color(red: 0.13, green: 0.6, blue: 0.3)),
-        HeatColor(id: "blue", name: "Blue", color: Color(red: 0.2, green: 0.45, blue: 0.95)),
-        HeatColor(id: "purple", name: "Purple", color: Color(red: 0.55, green: 0.35, blue: 0.9)),
-        HeatColor(id: "pink", name: "Pink", color: Color(red: 0.93, green: 0.3, blue: 0.55)),
-        HeatColor(id: "orange", name: "Orange", color: Color(red: 0.95, green: 0.5, blue: 0.1)),
+        HeatColor(id: "grey", name: "Grey", hex: nil),
+        HeatColor(id: "green", name: "Green", hex: "#21994D"),
+        HeatColor(id: "blue", name: "Blue", hex: "#3373F2"),
+        HeatColor(id: "purple", name: "Purple", hex: "#8C59E6"),
+        HeatColor(id: "pink", name: "Pink", hex: "#ED4D8C"),
+        HeatColor(id: "orange", name: "Orange", hex: "#F2801A"),
     ]
 
     @Published var heatColor: String {
@@ -40,6 +46,8 @@ final class AppSettings: ObservableObject {
     }
 
     var tint: Color { Self.heatColors.first { $0.id == heatColor }?.color ?? .primary }
+
+    var tintHex: String? { Self.heatColors.first { $0.id == heatColor }?.hex }
 
     /// Grey cells flip with light/dark mode, so their text must too; colored cells always read best in white.
     var strongText: Color { heatColor == "grey" ? Color(nsColor: .windowBackgroundColor) : .white }
@@ -173,6 +181,7 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var sync: SyncService
     @EnvironmentObject var reminders: ReminderSync
+    @EnvironmentObject var widget: WidgetExport
     let onBack: () -> Void
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -231,6 +240,16 @@ struct SettingsView: View {
                     Toggle("", isOn: $reminders.enabled).labelsHidden().toggleStyle(.switch).controlSize(.mini)
                 }
                 note("Two-way sync with a \"DayStack\" list in Apple Reminders, on your iPhone too.")
+                row("iPhone widget") {
+                    if widget.available {
+                        Label("Ready", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Needs Scriptable").font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                note(widget.available
+                     ? "On your iPhone: add a Scriptable widget, long-press it → Edit Widget → Script: DayStack."
+                     : "Install the free Scriptable app on your iPhone (iCloud on), then come back here.")
             }
 
             section("Claude") {

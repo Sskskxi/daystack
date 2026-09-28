@@ -10,7 +10,8 @@ swift build -c release
 
 APP=build/DayStack.app
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp .build/release/DayStack "$APP/Contents/MacOS/DayStack"
 cp .build/release/daystack-mcp "$APP/Contents/MacOS/daystack-mcp"
 
@@ -22,6 +23,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleName</key><string>DayStack</string>
     <key>CFBundleIdentifier</key><string>com.seokhoon.daystack</string>
     <key>CFBundleExecutable</key><string>DayStack</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundleVersion</key><string>${VERSION}</string>
@@ -54,6 +56,9 @@ How to install DayStack
    (You only need to do this once.)
 4. Look for the calendar icon in the menu bar at the top-right of your screen.
 5. To join your friends: click the icon → the people button → enter the invite code.
+
+Tip: to skip step 3 entirely, install from Terminal instead:
+   curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
 EOF
 hdiutil create -quiet -volname "DayStack" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"

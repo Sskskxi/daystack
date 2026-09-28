@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="96" alt="DayStack icon">
+
 # DayStack
 
 A tiny calendar + to-do list that lives in your Mac's menu bar, with a black-and-grey activity heatmap and to-do sharing with friends.
@@ -7,14 +9,29 @@ A tiny calendar + to-do list that lives in your Mac's menu bar, with a black-and
   <img src="docs/day.png" width="300" alt="Day view with to-do list">
 </p>
 
-## ⬇️ Download
+## ⬇️ Install
 
-**[Download DayStack.dmg](https://github.com/Sskskxi/toy-calendar/releases/latest/download/DayStack.dmg)** (macOS 13 or later, Apple Silicon Mac)
+Requires macOS 13 or later on an Apple Silicon Mac.
+
+### Easiest: one line in Terminal (no security prompts)
+
+Open **Terminal**, paste this, and press Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
+```
+
+It downloads the latest DayStack, puts it in Applications, and opens it, with no "can't verify" warning. Run the same line again any time to update.
+
+### Or: download the .dmg
+
+**[Download DayStack.dmg](https://github.com/Sskskxi/toy-calendar/releases/latest/download/DayStack.dmg)**
 
 1. Open `DayStack.dmg` and drag **DayStack** onto **Applications**.
 2. Open **DayStack** from your Applications folder.
-3. If macOS says it *can't verify* the app: open **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to DayStack, and confirm. You only need to do this once.
-4. Look for the calendar icon in the menu bar at the top-right of your screen and click it.
+3. macOS will say it *can't verify* the app: open **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to DayStack, and confirm. You only need to do this once.
+
+Then look for the calendar icon in the menu bar at the top-right of your screen and click it.
 
 > Don't see the icon? On MacBooks with a notch, extra menu bar icons can hide behind the camera. Quit an app or two, or check **System Settings → Menu Bar** and make sure DayStack is on.
 
@@ -27,6 +44,17 @@ A tiny calendar + to-do list that lives in your Mac's menu bar, with a black-and
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
 - **Updates:** an **Update** button appears when a new version is published to your group.
 - **Launch at login**, light and dark mode.
+
+## iPhone home screen widget
+
+The widget shows your heatmap and today's to-dos, in your heatmap color and in light or dark mode. It runs through the free **[Scriptable](https://apps.apple.com/app/scriptable/id1405459188)** app, so there's nothing to build.
+
+1. Install **Scriptable** on your iPhone and open it once (iCloud Drive must be on).
+2. Keep DayStack running on your Mac. It puts a **DayStack** script into Scriptable automatically; **Settings → iPhone widget** shows *Ready* once it has.
+3. On your iPhone home screen: long-press → **+** → **Scriptable** → pick a size → add it.
+4. Long-press the new widget → **Edit Widget** → **Script: DayStack**.
+
+Sizes: small shows the heatmap, medium adds today's to-dos, and large shows 18 weeks plus up to 8 to-dos. iOS refreshes widgets every 15 minutes or so, and iCloud may add a minute.
 
 ## Apple Reminders sync
 
