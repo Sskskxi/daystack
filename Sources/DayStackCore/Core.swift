@@ -24,11 +24,18 @@ public struct Todo: Identifiable, Codable, Equatable {
 }
 
 public enum Day {
-    public static let cal: Calendar = {
+    /// 1 = Sunday, 2 = Monday.
+    public static var firstWeekday = 2 {
+        didSet { cal = makeCalendar(firstWeekday) }
+    }
+
+    public private(set) static var cal = makeCalendar(2)
+
+    private static func makeCalendar(_ firstWeekday: Int) -> Calendar {
         var c = Calendar.current
-        c.firstWeekday = 2
+        c.firstWeekday = firstWeekday
         return c
-    }()
+    }
 
     private static let formatter: DateFormatter = {
         let f = DateFormatter()
@@ -47,9 +54,11 @@ public enum Day {
         return self.key(d) == key
     }
 
-    public static var mondayFirstSymbols: [String] {
+    /// Very short weekday symbols ordered from `firstWeekday`.
+    public static var weekdaySymbols: [String] {
         let s = cal.veryShortWeekdaySymbols
-        return Array(s[1...]) + [s[0]]
+        let start = cal.firstWeekday - 1
+        return Array(s[start...] + s[..<start])
     }
 }
 

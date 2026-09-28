@@ -118,6 +118,7 @@ struct FriendRow: View {
     let member: Member
     let action: () -> Void
     @State private var hover = false
+    @Environment(\.heatTint) private var tint
 
     var body: some View {
         let cal = Day.cal
@@ -142,7 +143,7 @@ struct FriendRow: View {
                     ForEach(0..<7, id: \.self) { i in
                         let d = cal.date(byAdding: .day, value: i - 6, to: today)!
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Shade.fill(Shade.level(done[Day.key(d)] ?? 0)))
+                            .fill(Shade.fill(Shade.level(done[Day.key(d)] ?? 0), tint: tint))
                             .frame(width: 8, height: 8)
                     }
                 }

@@ -4,8 +4,29 @@ import SwiftUI
 
 enum Shade {
     static func level(_ n: Int) -> Int { n == 0 ? 0 : n == 1 ? 1 : n <= 3 ? 2 : 3 }
-    static func fill(_ level: Int) -> Color {
-        Color.primary.opacity([0.07, 0.28, 0.55, 0.9][level])
+    static func fill(_ level: Int, tint: Color) -> Color {
+        level == 0 ? Color.primary.opacity(0.07) : tint.opacity([0, 0.3, 0.6, 0.95][level])
+    }
+}
+
+private struct HeatTintKey: EnvironmentKey {
+    static let defaultValue = Color.primary
+}
+
+private struct HeatStrongTextKey: EnvironmentKey {
+    static let defaultValue = Color(nsColor: .windowBackgroundColor)
+}
+
+extension EnvironmentValues {
+    var heatTint: Color {
+        get { self[HeatTintKey.self] }
+        set { self[HeatTintKey.self] = newValue }
+    }
+
+    /// Text color on the two darkest heatmap levels.
+    var heatStrongText: Color {
+        get { self[HeatStrongTextKey.self] }
+        set { self[HeatStrongTextKey.self] = newValue }
     }
 }
 
@@ -15,10 +36,12 @@ enum Screen: Equatable {
     case friends
     case friend(String)
     case friendDay(String, Date)
+    case settings
 }
 
 struct RootView: View {
     @EnvironmentObject var sync: SyncService
+    @EnvironmentObject var settings: AppSettings
     @State private var screen = Screen.calendar
     @State private var month = Date()
     @State private var showWeeks = false
@@ -30,7 +53,10 @@ struct RootView: View {
                 case .calendar:
                     CalendarPane(month: $month, showWeeks: $showWeeks,
                                  onPick: { screen = .day($0) },
-                                 onFriends: { screen = .friends })
+                                 onFriends: { screen = .friends },
+                                 onSettings: { screen = .settings })
+                case .settings:
+                    SettingsView { screen = .calendar }
                 case .day(let day):
                     DayView(day: day) { screen = .calendar }
                 case .friends:
@@ -51,11 +77,14 @@ struct RootView: View {
             }
             .padding(14)
             // One fixed height for every screen; MenuBarExtra windows don't reliably shrink when content gets shorter.
-            .frame(height: 470, alignment: .top)
-            Divider()
-            FooterBar().padding(.horizontal, 14).padding(.vertical, 8)
+            .frame(height: 500, alignment: .top)
+            // Rebuild date grids when the first day of the week changes.
+            .id(settings.weekStart)
+            NoticeBar { screen = .settings }
         }
         .frame(width: 320)
+        .environment(\.heatTint, settings.tint)
+        .environment(\.heatStrongText, settings.strongText)
     }
 }
 
@@ -63,18 +92,23 @@ struct RootView: View {
 
 struct CalendarPane: View {
     @EnvironmentObject var store: TodoStore
+    @EnvironmentObject var sync: SyncService
+    @Environment(\.heatTint) private var tint
     @Binding var month: Date
     @Binding var showWeeks: Bool
     let onPick: (Date) -> Void
     let onFriends: () -> Void
+    let onSettings: () -> Void
 
     var body: some View {
         let done = store.doneByDay
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 2) {
+            HStack(spacing: 1) {
                 Text(showWeeks ? "Last \(StackHeatmap.weeks) weeks" : month.formatted(.dateTime.year().month(.wide)))
                     .font(.headline)
-                Spacer()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
                 if !showWeeks {
                     IconButton("chevron.left") { shift(-1) }
                     Button("Today") { month = Date() }
@@ -85,6 +119,13 @@ struct CalendarPane: View {
                     .help("Friends")
                 IconButton(showWeeks ? "calendar" : "square.grid.3x3.fill") { showWeeks.toggle() }
                     .help(showWeeks ? "Month view" : "Stacked weeks view")
+                IconButton("gearshape", action: onSettings)
+                    .help("Settings")
+                    .overlay(alignment: .topTrailing) {
+                        if sync.updateAvailable {
+                            Circle().fill(Color.red).frame(width: 6, height: 6).offset(x: -2, y: 3)
+                        }
+                    }
             }
 
             if showWeeks {
@@ -98,7 +139,7 @@ struct CalendarPane: View {
                 Spacer()
                 Text("Less").font(.caption2).foregroundStyle(.secondary)
                 ForEach(0..<4, id: \.self) { l in
-                    RoundedRectangle(cornerRadius: 2).fill(Shade.fill(l)).frame(width: 9, height: 9)
+                    RoundedRectangle(cornerRadius: 2).fill(Shade.fill(l, tint: tint)).frame(width: 9, height: 9)
                 }
                 Text("More").font(.caption2).foregroundStyle(.secondary)
             }
@@ -194,13 +235,13 @@ struct MonthGrid: View {
     private var days: [Date] {
         let cal = Day.cal
         let first = cal.date(from: cal.dateComponents([.year, .month], from: month))!
-        let offset = (cal.component(.weekday, from: first) + 5) % 7
+        let offset = (cal.component(.weekday, from: first) - cal.firstWeekday + 7) % 7
         return (0..<42).map { cal.date(byAdding: .day, value: $0 - offset, to: first)! }
     }
 
     var body: some View {
         let cal = Day.cal
-        let symbols = Day.mondayFirstSymbols
+        let symbols = Day.weekdaySymbols
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
         LazyVGrid(columns: columns, spacing: 4) {
             ForEach(0..<7, id: \.self) { i in
@@ -227,17 +268,19 @@ struct DayCell: View {
     let hasItems: Bool
     let isToday: Bool
     let action: () -> Void
+    @Environment(\.heatTint) private var tint
+    @Environment(\.heatStrongText) private var strongText
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 5).fill(Shade.fill(level))
+                RoundedRectangle(cornerRadius: 5).fill(Shade.fill(level, tint: tint))
                 if isToday {
                     RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary, lineWidth: 1.5)
                 }
                 Text("\(number)")
                     .font(.system(size: 11, weight: isToday ? .bold : .regular))
-                    .foregroundStyle(level >= 2 ? Color(nsColor: .windowBackgroundColor) : Color.primary)
+                    .foregroundStyle(level >= 2 ? strongText : Color.primary)
             }
             .overlay(alignment: .bottom) {
                 if hasItems && level == 0 {
@@ -256,6 +299,7 @@ struct StackHeatmap: View {
     static let weeks = 18
     let done: [String: Int]
     let onPick: (Date) -> Void
+    @Environment(\.heatTint) private var tint
 
     private let size: CGFloat = 11
     private let gap: CGFloat = 3
@@ -265,7 +309,7 @@ struct StackHeatmap: View {
         let today = cal.startOfDay(for: Date())
         let thisWeek = cal.dateInterval(of: .weekOfYear, for: today)!.start
         let start = cal.date(byAdding: .weekOfYear, value: -(Self.weeks - 1), to: thisWeek)!
-        let symbols = Day.mondayFirstSymbols
+        let symbols = Day.weekdaySymbols
 
         HStack(alignment: .top, spacing: gap) {
             VStack(spacing: gap) {
@@ -285,7 +329,7 @@ struct StackHeatmap: View {
                         } else {
                             Button { onPick(d) } label: {
                                 RoundedRectangle(cornerRadius: 2.5)
-                                    .fill(Shade.fill(Shade.level(n)))
+                                    .fill(Shade.fill(Shade.level(n), tint: tint))
                                     .overlay {
                                         if cal.isDateInToday(d) {
                                             RoundedRectangle(cornerRadius: 2.5).strokeBorder(Color.primary, lineWidth: 1)
@@ -331,14 +375,23 @@ struct DayView: View {
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
 
-            TextField("Add a to-do…", text: $draft)
-                .textFieldStyle(.roundedBorder)
-                .focused($addFocused)
-                .onSubmit {
-                    store.add(draft, on: day)
-                    draft = ""
-                    addFocused = true
+            HStack(spacing: 6) {
+                TextField("Add a to-do…", text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($addFocused)
+                    .onSubmit(addDraft)
+                Button(action: addDraft) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(isDraftEmpty ? 0.08 : 0.85)))
+                        .foregroundStyle(isDraftEmpty ? Color.secondary : Color(nsColor: .windowBackgroundColor))
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .disabled(isDraftEmpty)
+                .help("Add")
+            }
 
             if items.isEmpty {
                 Text("Nothing yet. Type above and press ⏎.")
@@ -354,6 +407,14 @@ struct DayView: View {
         }
         .onAppear { DispatchQueue.main.async { addFocused = true } }
         .onExitCommand(perform: onBack)
+    }
+
+    private var isDraftEmpty: Bool { draft.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private func addDraft() {
+        store.add(draft, on: day)
+        draft = ""
+        addFocused = true
     }
 }
 
@@ -450,51 +511,35 @@ struct IconButton: View {
     }
 }
 
-struct FooterBar: View {
+/// Only shown when something needs attention: an available update or a sync/update message.
+struct NoticeBar: View {
     @EnvironmentObject var sync: SyncService
     @EnvironmentObject var reminders: ReminderSync
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    let onSettings: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach([sync.updateMessage, reminders.message].compactMap { $0 }, id: \.self) { msg in
-                Text(msg).font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            bar
-        }
-    }
-
-    private var bar: some View {
-        HStack(spacing: 8) {
-            Toggle("Reminders", isOn: $reminders.enabled)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-                .help("Two-way sync with a \"DayStack\" list in Apple Reminders (iPhone too, via iCloud)")
-            Toggle("Open at login", isOn: $launchAtLogin)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-                .onChange(of: launchAtLogin) { on in
-                    do {
-                        if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-                    } catch {
-                        NSLog("DayStack: launch-at-login change failed: \(error)")
-                        launchAtLogin = SMAppService.mainApp.status == .enabled
+        let messages = [sync.updateMessage, reminders.message].compactMap { $0 }
+        if sync.updateAvailable || !messages.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Divider()
+                ForEach(messages, id: \.self) { msg in
+                    Text(msg).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onTapGesture(perform: onSettings)
+                }
+                if sync.updateAvailable, let v = sync.latestVersion {
+                    HStack {
+                        Text("DayStack \(v) is available").font(.caption)
+                        Spacer()
+                        Button("Update") { sync.installUpdate() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(sync.installing)
                     }
                 }
-            Spacer()
-            if sync.updateAvailable, let v = sync.latestVersion {
-                Button("Update to \(v)") { sync.installUpdate() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(sync.installing)
-            } else {
-                Text("v\(SyncService.currentVersion)").font(.caption2).foregroundStyle(.tertiary)
             }
-            Button("Quit") { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
-                .buttonStyle(.plain)
-                .font(.caption)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
         }
     }
 }
