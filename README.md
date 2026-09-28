@@ -20,14 +20,14 @@ Requires macOS 13 or later on an Apple Silicon Mac.
 Open **Terminal**, paste this, and press Return:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | bash
 ```
 
 It downloads the latest DayStack, puts it in Applications, and opens it, with no "can't verify" warning. Run the same line again any time to update.
 
 ### Or: download the .dmg
 
-**[Download DayStack.dmg](https://github.com/Sskskxi/toy-calendar/releases/latest/download/DayStack.dmg)**
+**[Download DayStack.dmg](https://github.com/Sskskxi/daystack/releases/latest/download/DayStack.dmg)**
 
 1. Open `DayStack.dmg` and drag **DayStack** onto **Applications**.
 2. Open **DayStack** from your Applications folder.

@@ -20,14 +20,14 @@ macOS 13 이상, Apple Silicon(M1 이상) Mac에서 동작합니다.
 **터미널**을 열고 아래 한 줄을 붙여넣은 뒤 Return을 누르세요.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | bash
 ```
 
 최신 DayStack을 내려받아 응용 프로그램 폴더에 넣고 바로 실행합니다. "확인할 수 없음" 경고도 뜨지 않아요. 나중에 같은 줄을 다시 실행하면 최신 버전으로 업데이트됩니다.
 
 ### 또는: .dmg 파일로 설치
 
-**[DayStack.dmg 다운로드](https://github.com/Sskskxi/toy-calendar/releases/latest/download/DayStack.dmg)**
+**[DayStack.dmg 다운로드](https://github.com/Sskskxi/daystack/releases/latest/download/DayStack.dmg)**
 
 1. `DayStack.dmg`를 열고 **DayStack**을 **Applications**(응용 프로그램) 폴더로 끌어다 놓으세요.
 2. 응용 프로그램 폴더에서 **DayStack**을 여세요.

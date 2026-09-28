@@ -58,7 +58,7 @@ How to install DayStack
 5. To join your friends: click the icon → the people button → enter the invite code.
 
 Tip: to skip step 3 entirely, install from Terminal instead:
-   curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | bash
 EOF
 hdiutil create -quiet -volname "DayStack" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"

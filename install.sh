@@ -1,11 +1,11 @@
 #!/bin/bash
 # Installs (or updates) DayStack from the latest GitHub release.
-#   curl -fsSL https://raw.githubusercontent.com/Sskskxi/toy-calendar/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Sskskxi/daystack/main/install.sh | bash
 # Downloading with curl (not a browser) means macOS doesn't mark the app as "from the internet",
 # so it opens without the "can't verify" / Open Anyway step.
 set -euo pipefail
 
-URL="https://github.com/Sskskxi/toy-calendar/releases/latest/download/DayStack.dmg"
+URL="https://github.com/Sskskxi/daystack/releases/latest/download/DayStack.dmg"
 TMP=$(mktemp -d)
 MNT="$TMP/mnt"
 cleanup() {
