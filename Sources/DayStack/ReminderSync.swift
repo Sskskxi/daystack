@@ -142,13 +142,14 @@ final class ReminderSync: ObservableObject {
             if let rid = todo.reminderId, let r = byId[rid] {
                 linked.insert(rid)
                 let theirs = values(of: r)
-                guard theirs.title != todo.title || theirs.done != todo.done || theirs.day != todo.day else { continue }
+                guard theirs.title != todo.title || theirs.done != todo.done || theirs.day != todo.day || theirs.time != todo.time else { continue }
                 let theirTime = r.lastModifiedDate ?? .distantPast
                 if theirTime > todo.lastModified {
                     updates[todo.id] = { t in
                         t.title = theirs.title
                         t.done = theirs.done
                         t.day = theirs.day
+                        t.time = theirs.time
                         t.modifiedAt = theirTime
                     }
                 } else {
@@ -174,7 +175,8 @@ final class ReminderSync: ObservableObject {
                 imported.append(Todo(title: v.title, day: v.day, done: v.done,
                                      createdAt: r.creationDate ?? Date(),
                                      modifiedAt: r.lastModifiedDate ?? Date(),
-                                     reminderId: r.calendarItemIdentifier))
+                                     reminderId: r.calendarItemIdentifier,
+                                     time: v.time))
                 linked.insert(r.calendarItemIdentifier)
             }
         }
@@ -200,12 +202,14 @@ final class ReminderSync: ObservableObject {
         self.known = linked
     }
 
-    private func values(of r: EKReminder) -> (title: String, done: Bool, day: String) {
+    private func values(of r: EKReminder) -> (title: String, done: Bool, day: String, time: String?) {
         var day = Day.key(r.creationDate ?? Date())
+        var time: String?
         if let c = r.dueDateComponents, let y = c.year, let m = c.month, let d = c.day {
             day = String(format: "%04d-%02d-%02d", y, m, d)
+            if let h = c.hour { time = TimeText.format(h, c.minute ?? 0) }
         }
-        return (r.title ?? "", r.isCompleted, day)
+        return (r.title ?? "", r.isCompleted, day, time)
     }
 
     private func write(_ todo: Todo, to r: EKReminder) {
@@ -218,6 +222,17 @@ final class ReminderSync: ObservableObject {
         comps.year = ymd.year
         comps.month = ymd.month
         comps.day = ymd.day
-        r.dueDateComponents = comps
+        // A timed to-do becomes a timed reminder with an alarm, so the iPhone rings too.
+        if let time = todo.time, let (h, m) = TimeText.components(time) {
+            comps.hour = h
+            comps.minute = m
+            r.dueDateComponents = comps
+            if let at = todo.alertDate { r.alarms = [EKAlarm(absoluteDate: at)] }
+        } else {
+            comps.hour = nil
+            comps.minute = nil
+            r.dueDateComponents = comps
+            r.alarms = nil
+        }
     }
 }

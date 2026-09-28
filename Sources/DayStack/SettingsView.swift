@@ -45,8 +45,22 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var todoAlerts: Bool { didSet { UserDefaults.standard.set(todoAlerts, forKey: "alertTodos") } }
+    @Published var morningOn: Bool { didSet { UserDefaults.standard.set(morningOn, forKey: "alertMorning") } }
+    /// Minutes after midnight.
+    @Published var morningMinutes: Int { didSet { UserDefaults.standard.set(morningMinutes, forKey: "morningMinutes") } }
+    @Published var eveningOn: Bool { didSet { UserDefaults.standard.set(eveningOn, forKey: "alertEvening") } }
+    @Published var eveningMinutes: Int { didSet { UserDefaults.standard.set(eveningMinutes, forKey: "eveningMinutes") } }
+
     init() {
         let d = UserDefaults.standard
+        func bool(_ key: String, default value: Bool) -> Bool { d.object(forKey: key) == nil ? value : d.bool(forKey: key) }
+        func int(_ key: String, default value: Int) -> Int { d.object(forKey: key) == nil ? value : d.integer(forKey: key) }
+        todoAlerts = bool("alertTodos", default: true)
+        morningOn = bool("alertMorning", default: true)
+        morningMinutes = int("morningMinutes", default: 9 * 60)
+        eveningOn = bool("alertEvening", default: true)
+        eveningMinutes = int("eveningMinutes", default: 21 * 60)
         heatColor = d.string(forKey: "heatColor") ?? "grey"
         weekStart = d.integer(forKey: "weekStart") == 1 ? 1 : 2
         language = AppLanguage(rawValue: d.string(forKey: "language") ?? "") ?? .auto
@@ -196,6 +210,7 @@ struct SettingsView: View {
     @EnvironmentObject var sync: SyncService
     @EnvironmentObject var reminders: ReminderSync
     @EnvironmentObject var widget: WidgetExport
+    @EnvironmentObject var alerts: AlertScheduler
     let onBack: () -> Void
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -211,6 +226,8 @@ struct SettingsView: View {
                 Spacer()
             }
 
+            ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
             section(L("Calendar")) {
                 row(L("Heatmap color")) {
                     HStack(spacing: 6) {
@@ -248,6 +265,23 @@ struct SettingsView: View {
                 }
             }
 
+            section(L("Alerts")) {
+                row(L("Time alerts")) {
+                    Toggle("", isOn: $settings.todoAlerts).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                }
+                row(L("Morning summary")) {
+                    timePicker($settings.morningMinutes).disabled(!settings.morningOn)
+                    Toggle("", isOn: $settings.morningOn).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                }
+                row(L("Evening nudge")) {
+                    timePicker($settings.eveningMinutes).disabled(!settings.eveningOn)
+                    Toggle("", isOn: $settings.eveningOn).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                }
+                note(alerts.denied
+                     ? L("Notifications are off for DayStack. Turn them on in System Settings → Notifications → DayStack.")
+                     : L("Type a time in a to-do (\"3pm\", \"15:00\", \"오후 3시\") or use the clock button to get an alert."))
+            }
+
             section(L("General")) {
                 row(L("Open at login")) {
                     Toggle("", isOn: $launchAtLogin).labelsHidden().toggleStyle(.switch).controlSize(.mini)
@@ -283,8 +317,10 @@ struct SettingsView: View {
                           connect: ClaudeIntegration.connectDesktop, disconnect: ClaudeIntegration.disconnectDesktop)
                 note(claudeMessage ?? L("Lets Claude add and edit your to-dos, e.g. \"add a plan: gym tomorrow 7pm\"."))
             }
+            }
+            .padding(.trailing, 4)
+            }
 
-            Spacer(minLength: 0)
             Divider()
             HStack {
                 Text("DayStack v\(SyncService.currentVersion)").font(.caption).foregroundStyle(.secondary)
@@ -302,6 +338,21 @@ struct SettingsView: View {
         }
         .onAppear(perform: refreshClaude)
         .onExitCommand(perform: onBack)
+    }
+
+    private func timePicker(_ minutes: Binding<Int>) -> some View {
+        let date = Binding<Date>(
+            get: { Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(minutes.wrappedValue * 60)) },
+            set: { d in
+                let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+                minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            }
+        )
+        return DatePicker("", selection: date, displayedComponents: .hourAndMinute)
+            .labelsHidden()
+            .datePickerStyle(.field)
+            .controlSize(.small)
+            .environment(\.locale, L10n.locale)
     }
 
     private func refreshClaude() {

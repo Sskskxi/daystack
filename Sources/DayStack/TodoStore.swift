@@ -52,7 +52,15 @@ final class TodoStore: ObservableObject {
     func add(_ title: String, on date: Date) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        apply { $0.append(Todo(title: t, day: Day.key(date))) }
+        apply { $0.append(Todo(title: t, day: Day.key(date), time: TimeText.parse(t))) }
+    }
+
+    func setTime(_ id: UUID, _ time: String?) {
+        apply { todos in
+            guard let i = todos.firstIndex(where: { $0.id == id }) else { return }
+            todos[i].time = time
+            todos[i].modifiedAt = Date()
+        }
     }
 
     func toggle(_ id: UUID) {
@@ -69,6 +77,7 @@ final class TodoStore: ObservableObject {
         apply { todos in
             guard let i = todos.firstIndex(where: { $0.id == id }) else { return }
             todos[i].title = t
+            if let time = TimeText.parse(t) { todos[i].time = time }
             todos[i].modifiedAt = Date()
         }
     }

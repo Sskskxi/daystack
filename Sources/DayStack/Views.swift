@@ -439,6 +439,8 @@ struct TodoRow: View {
     @State private var editing = false
     @State private var text = ""
     @State private var hover = false
+    @State private var pickingTime = false
+    @State private var pickedTime = Date()
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -448,6 +450,14 @@ struct TodoRow: View {
                     .font(.system(size: compact ? 12 : 14))
             }
             .buttonStyle(.plain)
+
+            if let at = todo.alertDate, !editing {
+                Label(at.fmt(.dateTime.hour().minute()), systemImage: "bell")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: compact ? 10 : 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
 
             if editing {
                 TextField("", text: $text)
@@ -470,7 +480,11 @@ struct TodoRow: View {
                     .onTapGesture(count: 2, perform: beginEdit)
             }
 
-            if hover && !editing {
+            // Stay visible while the popover is open, or it would lose its anchor and close.
+            if (hover || pickingTime) && !editing {
+                IconButton("clock", action: openTimePicker)
+                    .help(L("Alert time"))
+                    .popover(isPresented: $pickingTime, arrowEdge: .bottom) { timePopover }
                 IconButton("pencil", action: beginEdit).help(L("Edit"))
                 IconButton("trash") { store.delete(todo.id) }.help(L("Delete"))
             }
@@ -487,6 +501,39 @@ struct TodoRow: View {
         .padding(.vertical, compact ? 1 : 2)
         .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(hover ? 0.06 : 0)))
         .onHover { hover = $0 }
+    }
+
+    private var timePopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L("Alert time")).font(.headline)
+            DatePicker("", selection: $pickedTime, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .environment(\.locale, L10n.locale)
+            HStack {
+                if todo.time != nil {
+                    Button(L("Remove")) {
+                        store.setTime(todo.id, nil)
+                        pickingTime = false
+                    }
+                }
+                Spacer()
+                Button(L("Set")) {
+                    let c = Calendar.current.dateComponents([.hour, .minute], from: pickedTime)
+                    store.setTime(todo.id, TimeText.format(c.hour ?? 9, c.minute ?? 0))
+                    pickingTime = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .padding(12)
+        .frame(width: 180)
+    }
+
+    private func openTimePicker() {
+        pickedTime = todo.alertDate ?? Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
+        pickingTime = true
     }
 
     private func beginEdit() {

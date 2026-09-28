@@ -49,6 +49,14 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 - **English and Korean:** follows your Mac's language, or pick one in **Settings → Language**.
 - Light and dark mode.
 
+## Alerts
+
+- **Time alerts:** type a time in a to-do, like *"3pm Dentist"*, *"15:30 meeting"* or *"오후 3시 치과"*, or hover a to-do and click 🕒. You get a Mac notification at that time. With Reminders sync on, your iPhone rings too.
+- **Morning summary:** a notification each morning with the day's to-dos (9:00 by default).
+- **Evening nudge:** a notification in the evening only if something is still open (21:00 by default).
+
+Turn each one on or off and change the times in **Settings → Alerts**. Allow notifications when macOS asks.
+
 ## iPhone home screen widget
 
 The widget shows your heatmap and today's to-dos, in your heatmap color and in light or dark mode. It runs through the free **[Scriptable](https://apps.apple.com/app/scriptable/id1405459188)** app, so there's nothing to build.

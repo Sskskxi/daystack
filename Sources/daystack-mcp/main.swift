@@ -51,12 +51,19 @@ func findIndex(_ todos: [Todo], _ raw: Any?) throws -> Int {
 }
 
 func describe(_ t: Todo) -> String {
-    "[\(t.done ? "x" : " ")] \(t.title)  (id: \(shortId(t)), \(t.day))"
+    "[\(t.done ? "x" : " ")] \(t.title)  (id: \(shortId(t)), \(t.day)\(t.time.map { " \($0)" } ?? ""))"
 }
 
 // MARK: - Tools
 
 let dateProp: [String: Any] = ["type": "string", "description": "YYYY-MM-DD in the user's local time, or 'today' / 'tomorrow' / 'yesterday'."]
+let timeProp: [String: Any] = ["type": "string", "description": "Alert time HH:mm (24h, local). The user gets a notification then. Omit for an all-day to-do."]
+
+func parseTime(_ raw: Any?, title: String) throws -> String? {
+    guard let s = (raw as? String)?.trimmingCharacters(in: .whitespaces), !s.isEmpty else { return TimeText.parse(title) }
+    guard TimeText.isValid(s) else { throw ToolError(message: "Invalid time '\(s)'. Use HH:mm, e.g. 15:30.") }
+    return s
+}
 
 func toolDefinitions() -> [[String: Any]] {
     let today = todayKey()
@@ -81,6 +88,7 @@ func toolDefinitions() -> [[String: Any]] {
                 "properties": [
                     "title": ["type": "string", "description": "What to do."],
                     "date": dateProp,
+                    "time": timeProp,
                 ],
                 "required": ["title"],
             ],
@@ -95,7 +103,7 @@ func toolDefinitions() -> [[String: Any]] {
                         "type": "array",
                         "items": [
                             "type": "object",
-                            "properties": ["title": ["type": "string"], "date": dateProp],
+                            "properties": ["title": ["type": "string"], "date": dateProp, "time": timeProp],
                             "required": ["title"],
                         ],
                     ],
@@ -112,6 +120,7 @@ func toolDefinitions() -> [[String: Any]] {
                     "id": ["type": "string", "description": "Id (or its first 8 characters) from list_todos."],
                     "title": ["type": "string"],
                     "date": dateProp,
+                    "time": ["type": "string", "description": "Alert time HH:mm, or empty string to remove the alert."],
                     "done": ["type": "boolean"],
                 ],
                 "required": ["id"],
@@ -150,21 +159,24 @@ func callTool(_ name: String, _ args: [String: Any]) throws -> String {
         if todos.isEmpty { return out + "No to-dos from \(start) to \(end)." }
         for (day, items) in Dictionary(grouping: todos, by: \.day).sorted(by: { $0.key < $1.key }) {
             out += "\n\(day) (\(weekday(day))) — \(items.filter(\.done).count)/\(items.count) done\n"
-            for t in items { out += "  [\(t.done ? "x" : " ")] \(t.title)  (id: \(shortId(t)))\n" }
+            for t in items { out += "  [\(t.done ? "x" : " ")] \(t.time.map { "\($0) " } ?? "")\(t.title)  (id: \(shortId(t)))\n" }
         }
         return out
 
     case "add_todo":
         let title = try cleanTitle(args["title"])
         let day = try parseDate(args["date"], default: todayKey())
-        let todo = Todo(title: title, day: day)
+        let todo = Todo(title: title, day: day, time: try parseTime(args["time"], title: title))
         try TodoFile.mutate { $0.append(todo) }
         return "Added: \(describe(todo))"
 
     case "add_todos":
         guard let items = args["items"] as? [[String: Any]], !items.isEmpty else { throw ToolError(message: "'items' must be a non-empty array.") }
         guard items.count <= maxBatch else { throw ToolError(message: "Too many items (max \(maxBatch) per call).") }
-        let new = try items.map { Todo(title: try cleanTitle($0["title"]), day: try parseDate($0["date"], default: todayKey())) }
+        let new = try items.map { item -> Todo in
+            let title = try cleanTitle(item["title"])
+            return Todo(title: title, day: try parseDate(item["date"], default: todayKey()), time: try parseTime(item["time"], title: title))
+        }
         try TodoFile.mutate { $0 += new }
         return "Added \(new.count) to-dos:\n" + new.map { "  " + describe($0) }.joined(separator: "\n")
 
@@ -172,12 +184,15 @@ func callTool(_ name: String, _ args: [String: Any]) throws -> String {
         let newTitle = try args["title"].map { try cleanTitle($0) }
         let newDay = try args["date"].map { try parseDate($0, default: "") }
         let newDone = args["done"] as? Bool
+        let timeArg = args["time"] as? String
+        if let t = timeArg, !t.isEmpty, !TimeText.isValid(t) { throw ToolError(message: "Invalid time '\(t)'. Use HH:mm.") }
         var result: Todo?
         try TodoFile.mutate { todos in
             let i = try findIndex(todos, args["id"])
             if let newTitle { todos[i].title = newTitle }
             if let newDay { todos[i].day = newDay }
             if let newDone { todos[i].done = newDone }
+            if let timeArg { todos[i].time = timeArg.isEmpty ? nil : timeArg }
             todos[i].modifiedAt = Date()
             result = todos[i]
         }
