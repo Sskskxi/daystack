@@ -49,10 +49,12 @@ final class TodoStore: ObservableObject {
 
     var countByDay: [String: Int] { todos.countByDay }
 
-    func add(_ title: String, on date: Date) {
+    /// `time` ("HH:mm") wins over a time written in the title; `detectTime: false` ignores the title.
+    func add(_ title: String, on date: Date, time: String? = nil, detectTime: Bool = true) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        apply { $0.append(Todo(title: t, day: Day.key(date), time: TimeText.parse(t))) }
+        let resolved = time ?? (detectTime ? TimeText.parse(t) : nil)
+        apply { $0.append(Todo(title: t, day: Day.key(date), time: resolved)) }
     }
 
     func setTime(_ id: UUID, _ time: String?) {

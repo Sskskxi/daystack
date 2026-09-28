@@ -368,10 +368,15 @@ struct DayView: View {
     let onBack: () -> Void
 
     @State private var draft = ""
+    @State private var draftTime: String?
+    /// The user removed the time, so don't fall back to one written in the text.
+    @State private var timeCleared = false
+    @State private var pickingTime = false
     @FocusState private var addFocused: Bool
 
     var body: some View {
         let items = store.items(on: day)
+        let shownTime = timeCleared ? nil : (draftTime ?? TimeText.parse(draft))
         let doneCount = items.filter(\.done).count
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
@@ -402,6 +407,28 @@ struct DayView: View {
                 .buttonStyle(.plain)
                 .disabled(isDraftEmpty)
                 .help(L("Add"))
+                Button { pickingTime = true } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: shownTime == nil ? "clock" : "bell.fill")
+                        if let shownTime { Text(TimeText.display(shownTime)).monospacedDigit() }
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, shownTime == nil ? 0 : 6)
+                    .frame(minWidth: 22, minHeight: 22)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(shownTime == nil ? 0.08 : 0.15)))
+                    .foregroundStyle(shownTime == nil ? Color.secondary : Color.primary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L("Alert time"))
+                .popover(isPresented: $pickingTime, arrowEdge: .bottom) {
+                    TimePopover(initial: shownTime,
+                                onSet: { draftTime = $0; timeCleared = false },
+                                onRemove: { draftTime = nil; timeCleared = true }) {
+                        pickingTime = false
+                        addFocused = true
+                    }
+                }
             }
 
             if items.isEmpty {
@@ -423,9 +450,63 @@ struct DayView: View {
     private var isDraftEmpty: Bool { draft.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private func addDraft() {
-        store.add(draft, on: day)
+        guard !isDraftEmpty else { return }
+        store.add(draft, on: day, time: draftTime, detectTime: !timeCleared)
         draft = ""
+        draftTime = nil
+        timeCleared = false
         addFocused = true
+    }
+}
+
+/// Small popover for choosing an alert time ("HH:mm") or removing it.
+struct TimePopover: View {
+    let initial: String?
+    let onSet: (String) -> Void
+    let onRemove: () -> Void
+    let dismiss: () -> Void
+
+    @State private var picked = Date()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L("Alert time")).font(.headline)
+            DatePicker("", selection: $picked, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .environment(\.locale, L10n.locale)
+            HStack {
+                if initial != nil {
+                    Button(L("Remove")) {
+                        onRemove()
+                        dismiss()
+                    }
+                }
+                Spacer()
+                Button(L("Set")) {
+                    let c = Calendar.current.dateComponents([.hour, .minute], from: picked)
+                    onSet(TimeText.format(c.hour ?? 9, c.minute ?? 0))
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .padding(12)
+        .frame(width: 180)
+        .onAppear {
+            let (h, m) = initial.flatMap(TimeText.components) ?? (9, 0)
+            picked = Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()) ?? Date()
+        }
+    }
+}
+
+extension TimeText {
+    /// "15:00" shown in the user's locale, e.g. "3:00 PM" or "오후 3:00".
+    static func display(_ hhmm: String) -> String {
+        guard let (h, m) = components(hhmm),
+              let d = Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()) else { return hhmm }
+        return d.fmt(.dateTime.hour().minute())
     }
 }
 
@@ -440,7 +521,6 @@ struct TodoRow: View {
     @State private var text = ""
     @State private var hover = false
     @State private var pickingTime = false
-    @State private var pickedTime = Date()
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -451,8 +531,8 @@ struct TodoRow: View {
             }
             .buttonStyle(.plain)
 
-            if let at = todo.alertDate, !editing {
-                Label(at.fmt(.dateTime.hour().minute()), systemImage: "bell")
+            if let time = todo.time, !editing {
+                Label(TimeText.display(time), systemImage: "bell")
                     .labelStyle(.titleAndIcon)
                     .font(.system(size: compact ? 10 : 11).monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -482,9 +562,13 @@ struct TodoRow: View {
 
             // Stay visible while the popover is open, or it would lose its anchor and close.
             if (hover || pickingTime) && !editing {
-                IconButton("clock", action: openTimePicker)
+                IconButton("clock") { pickingTime = true }
                     .help(L("Alert time"))
-                    .popover(isPresented: $pickingTime, arrowEdge: .bottom) { timePopover }
+                    .popover(isPresented: $pickingTime, arrowEdge: .bottom) {
+                        TimePopover(initial: todo.time,
+                                    onSet: { store.setTime(todo.id, $0) },
+                                    onRemove: { store.setTime(todo.id, nil) }) { pickingTime = false }
+                    }
                 IconButton("pencil", action: beginEdit).help(L("Edit"))
                 IconButton("trash") { store.delete(todo.id) }.help(L("Delete"))
             }
@@ -501,39 +585,6 @@ struct TodoRow: View {
         .padding(.vertical, compact ? 1 : 2)
         .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(hover ? 0.06 : 0)))
         .onHover { hover = $0 }
-    }
-
-    private var timePopover: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L("Alert time")).font(.headline)
-            DatePicker("", selection: $pickedTime, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .datePickerStyle(.field)
-                .environment(\.locale, L10n.locale)
-            HStack {
-                if todo.time != nil {
-                    Button(L("Remove")) {
-                        store.setTime(todo.id, nil)
-                        pickingTime = false
-                    }
-                }
-                Spacer()
-                Button(L("Set")) {
-                    let c = Calendar.current.dateComponents([.hour, .minute], from: pickedTime)
-                    store.setTime(todo.id, TimeText.format(c.hour ?? 9, c.minute ?? 0))
-                    pickingTime = false
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .controlSize(.small)
-        }
-        .padding(12)
-        .frame(width: 180)
-    }
-
-    private func openTimePicker() {
-        pickedTime = todo.alertDate ?? Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
-        pickingTime = true
     }
 
     private func beginEdit() {
