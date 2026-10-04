@@ -10,9 +10,14 @@ public struct Todo: Identifiable, Codable, Equatable {
     public var reminderId: String?
     /// Alert time as "HH:mm" (24h), or nil for an all-day to-do.
     public var time: String?
+    /// `TodoCategory.id`, or nil when uncategorized. An id whose category was deleted counts as none.
+    public var category: String?
+    public var important: Bool?
+    public var repeats: Repeat?
 
     public init(id: UUID = UUID(), title: String, day: String, done: Bool = false,
-                createdAt: Date = Date(), modifiedAt: Date? = Date(), reminderId: String? = nil, time: String? = nil) {
+                createdAt: Date = Date(), modifiedAt: Date? = Date(), reminderId: String? = nil, time: String? = nil,
+                category: String? = nil, important: Bool = false, repeats: Repeat? = nil) {
         self.id = id
         self.title = title
         self.day = day
@@ -21,6 +26,14 @@ public struct Todo: Identifiable, Codable, Equatable {
         self.modifiedAt = modifiedAt
         self.reminderId = reminderId
         self.time = time
+        self.category = category
+        self.important = important ? true : nil
+        self.repeats = repeats
+    }
+
+    public var isImportant: Bool {
+        get { important ?? false }
+        set { important = newValue ? true : nil }
     }
 
     /// The moment this to-do's alert should fire, if it has a time.
@@ -122,7 +135,107 @@ public enum TimeText {
     }
 }
 
+/// How a to-do comes back once it's done. Completing it adds the next one as a new to-do, so the
+/// finished one stays on its day (and in the heatmap).
+public enum Repeat: String, Codable, CaseIterable {
+    case daily, weekdays, weekly, monthly
+
+    /// The first occurrence after both `key` and `today`, so a late or early check-off never lands in the past.
+    public func next(after key: String, today: String) -> String? {
+        guard let start = Day.date(key) else { return nil }
+        let floor = Swift.max(key, today)
+        let cal = Calendar.current
+        for n in 1...5000 {
+            let d: Date?
+            switch self {
+            case .daily, .weekdays: d = cal.date(byAdding: .day, value: n, to: start)
+            case .weekly: d = cal.date(byAdding: .day, value: 7 * n, to: start)
+            // Counted from the start each time so the 31st doesn't drift to the 28th after February.
+            case .monthly: d = cal.date(byAdding: .month, value: n, to: start)
+            }
+            guard let d else { return nil }
+            if self == .weekdays, cal.isDateInWeekend(d) { continue }
+            let k = Day.key(d)
+            if k > floor { return k }
+        }
+        return nil
+    }
+}
+
+public struct TodoCategory: Identifiable, Codable, Equatable {
+    public var id: String
+    public var name: String
+    /// "#RRGGBB"
+    public var color: String
+
+    public init(id: String = UUID().uuidString, name: String, color: String) {
+        self.id = id
+        self.name = name
+        self.color = color
+    }
+
+    public static let palette = ["#3373F2", "#21994D", "#F2801A", "#8C59E6", "#ED4D8C", "#E5484D", "#12A594", "#8B8D98"]
+}
+
+/// Categories live next to the to-dos so the MCP server can file new to-dos under them too.
+public enum CategoryFile {
+    public static var url: URL { TodoFile.directory.appendingPathComponent("categories.json") }
+
+    /// nil when the file doesn't exist yet (first launch), as opposed to an empty list the user chose.
+    public static func load() -> [TodoCategory]? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode([TodoCategory].self, from: data)
+    }
+
+    public static func save(_ categories: [TodoCategory]) throws {
+        try FileManager.default.createDirectory(at: TodoFile.directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(categories).write(to: url, options: .atomic)
+    }
+}
+
+/// Quick-add shorthand in a title: "#Work" files it under a category, a lone "!" marks it important.
+/// Both are removed from the title; a "#word" that isn't a category name is left alone.
+public enum QuickAdd {
+    public struct Result {
+        public var title: String
+        public var category: String?
+        public var important: Bool
+    }
+
+    public static func parse(_ text: String, categories: [TodoCategory]) -> Result {
+        var category: String?
+        var important = false
+        var kept: [Substring] = []
+        for word in text.split(separator: " ", omittingEmptySubsequences: true) {
+            if word.allSatisfy({ $0 == "!" }) {
+                important = true
+            } else if word.hasPrefix("#"), word.count > 1,
+                      let c = categories.first(where: { $0.name.compare(word.dropFirst(), options: .caseInsensitive) == .orderedSame }) {
+                category = c.id
+            } else {
+                kept.append(word)
+            }
+        }
+        let title = kept.joined(separator: " ")
+        // A title that was nothing but shorthand keeps its text rather than becoming empty.
+        return Result(title: title.isEmpty ? text.trimmingCharacters(in: .whitespaces) : title, category: category, important: important)
+    }
+}
+
 public extension Array where Element == Todo {
+    /// Checks or unchecks a to-do. Checking a repeating one adds its next occurrence and hands the
+    /// repeat over to it, so unchecking and re-checking can't add a second copy.
+    mutating func setDone(at i: Int, _ done: Bool, now: Date = Date()) {
+        guard self[i].done != done else { return }
+        self[i].done = done
+        self[i].modifiedAt = now
+        guard done, let rule = self[i].repeats, let next = rule.next(after: self[i].day, today: Day.key(now)) else { return }
+        let t = self[i]
+        self[i].repeats = nil
+        append(Todo(title: t.title, day: next, createdAt: now, modifiedAt: now, time: t.time,
+                    category: t.category, important: t.isImportant, repeats: rule))
+    }
+
     func on(_ date: Date) -> [Todo] {
         let k = Day.key(date)
         return filter { $0.day == k }

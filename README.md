@@ -41,7 +41,12 @@ Then look for the calendar icon in the menu bar at the top-right of your screen 
 
 - **Calendar:** each day is shaded grey → black by how many to-dos you finished that day, with one small dot per to-do (up to 5).
 - **Stacked heatmap:** the grid button shows the last 18 weeks, GitHub-style.
-- **Quick to-dos:** click a day, type, press ⏎. Double-click a to-do to edit it; hover to delete.
+- **Quick to-dos:** click a day, type, press ⏎. Double-click a to-do to edit it; hover it for the ⋯ menu.
+- **Categories:** split to-dos into Work, Study, Personal (or your own, with colors, in **Settings → Categories**). Each day is grouped by category, and the checkbox takes the category's color. Pick one with the 🏷 button by the add field, or type `#Work` in the to-do.
+- **Postpone and reschedule:** hover a to-do and click ↪ to push it a day, or use ⋯ → *Move to today* / *Choose date…*. The ↪ menu on a day moves everything unfinished at once, and *Move all to today* clears the "Unfinished earlier" list.
+- **Important:** flag a to-do (⋯ menu, ⌘I, or a lone `!` in the title). Flagged to-dos come first and show as high priority in Reminders.
+- **Repeating to-dos:** daily, weekdays, weekly or monthly. Checking one off adds the next one.
+- **Keyboard shortcuts:** ⌘N new to-do, ↑↓ select, Space check, ⌘⌫ delete, ⌘] postpone, ⌘Z undo, and more. Full list in **Settings → Keyboard shortcuts**.
 - **Today at a glance:** today's to-dos and anything left unfinished from earlier days are shown under the calendar.
 - **Friends:** share full to-do lists and heatmaps through a shared iCloud Drive folder.
 - **Updates:** **Settings → Check for updates** installs new versions from GitHub or your group in one click. DayStack also checks by itself.

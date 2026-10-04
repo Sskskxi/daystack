@@ -157,6 +157,7 @@ final class ReminderSync: ObservableObject {
 
         var updates: [UUID: (inout Todo) -> Void] = [:]
         var deletes = Set<UUID>()
+        var completed = Set<UUID>()
         var created: [(UUID, EKReminder)] = []
         var imported: [Todo] = []
         var linked = Set<String>()
@@ -165,14 +166,18 @@ final class ReminderSync: ObservableObject {
             if let rid = todo.reminderId, let r = byId[rid] {
                 linked.insert(rid)
                 let theirs = values(of: r)
-                guard theirs.title != todo.title || theirs.done != todo.done || theirs.day != todo.day || theirs.time != todo.time else { continue }
+                guard theirs.title != todo.title || theirs.done != todo.done || theirs.day != todo.day
+                        || theirs.time != todo.time || theirs.important != todo.isImportant else { continue }
                 let theirTime = r.lastModifiedDate ?? .distantPast
                 if theirTime > todo.lastModified {
+                    // Checked off in Reminders: go through setDone below so a repeating to-do comes back.
+                    if theirs.done && !todo.done { completed.insert(todo.id) }
                     updates[todo.id] = { t in
                         t.title = theirs.title
-                        t.done = theirs.done
+                        if !theirs.done { t.done = false }
                         t.day = theirs.day
                         t.time = theirs.time
+                        t.isImportant = theirs.important
                         t.modifiedAt = theirTime
                     }
                 } else {
@@ -199,7 +204,7 @@ final class ReminderSync: ObservableObject {
                                      createdAt: r.creationDate ?? Date(),
                                      modifiedAt: r.lastModifiedDate ?? Date(),
                                      reminderId: r.calendarItemIdentifier,
-                                     time: v.time))
+                                     time: v.time, important: v.important))
                 linked.insert(r.calendarItemIdentifier)
             }
         }
@@ -218,6 +223,9 @@ final class ReminderSync: ObservableObject {
                 for i in all.indices {
                     updates[all[i].id]?(&all[i])
                 }
+                for i in all.indices where completed.contains(all[i].id) {
+                    all.setDone(at: i, true)
+                }
                 let existing = Set(all.compactMap(\.reminderId))
                 all += imported.filter { !existing.contains($0.reminderId ?? "") }
             }
@@ -225,19 +233,24 @@ final class ReminderSync: ObservableObject {
         self.known = linked
     }
 
-    private func values(of r: EKReminder) -> (title: String, done: Bool, day: String, time: String?) {
+    private func values(of r: EKReminder) -> (title: String, done: Bool, day: String, time: String?, important: Bool) {
         var day = Day.key(r.creationDate ?? Date())
         var time: String?
         if let c = r.dueDateComponents, let y = c.year, let m = c.month, let d = c.day {
             day = String(format: "%04d-%02d-%02d", y, m, d)
             if let h = c.hour { time = TimeText.format(h, c.minute ?? 0) }
         }
-        return (r.title ?? "", r.isCompleted, day, time)
+        return (r.title ?? "", r.isCompleted, day, time, Self.isHigh(r.priority))
     }
+
+    /// Reminders priority 1–4 is "high"; important maps to it so the flag shows on the iPhone too.
+    private static func isHigh(_ priority: Int) -> Bool { (1...4).contains(priority) }
 
     private func write(_ todo: Todo, to r: EKReminder) {
         r.title = todo.title
         r.isCompleted = todo.done
+        // Only touch priority on a real change, so a "medium" set in Reminders survives.
+        if Self.isHigh(r.priority) != todo.isImportant { r.priority = todo.isImportant ? 1 : 0 }
         guard let date = Day.date(todo.day) else { return }
         let ymd = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
         var comps = r.dueDateComponents ?? DateComponents()

@@ -192,6 +192,7 @@ enum ClaudeIntegration {
 // MARK: - Settings screen
 
 struct SettingsView: View {
+    @EnvironmentObject var store: TodoStore
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var sync: SyncService
     @EnvironmentObject var reminders: ReminderSync
@@ -250,6 +251,20 @@ struct SettingsView: View {
                 }
             }
 
+            section(L("Categories")) {
+                ForEach(store.categories) { c in
+                    CategoryEditRow(category: c)
+                }
+                Button {
+                    store.addCategory()
+                } label: {
+                    Label(L("Add category"), systemImage: "plus").font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                note(L("Click the dot to change its color. Type #name in a to-do to file it. Deleting a category keeps its to-dos."))
+            }
+
             section(L("Alerts")) {
                 row(L("Sync with Reminders")) {
                     Toggle("", isOn: Binding(get: { reminders.enabled }, set: { reminders.setEnabledByUser($0) }))
@@ -283,6 +298,18 @@ struct SettingsView: View {
                 note(widget.available
                      ? L("On your iPhone: add a Scriptable widget, long-press it → Edit Widget → Script: DayStack.")
                      : L("Install the free Scriptable app on your iPhone (iCloud on), then come back here."))
+            }
+
+            section(L("Keyboard shortcuts")) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(ShortcutList.items, id: \.keys) { item in
+                        HStack {
+                            Text(L(item.what)).font(.system(size: 11))
+                            Spacer()
+                            Text(item.keys).font(.system(size: 11).monospaced()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
 
             section("Claude") {
@@ -375,5 +402,40 @@ struct SettingsView: View {
 
     private func note(_ text: String) -> some View {
         Text(text).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Name, color and delete for one category in Settings.
+struct CategoryEditRow: View {
+    @EnvironmentObject var store: TodoStore
+    let category: TodoCategory
+    @State private var name = ""
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                let p = TodoCategory.palette
+                let next = p[((p.firstIndex(of: category.color) ?? -1) + 1) % p.count]
+                store.updateCategory(TodoCategory(id: category.id, name: category.name, color: next))
+            } label: {
+                Circle().fill(Color(hex: category.color)).frame(width: 12, height: 12)
+            }
+            .buttonStyle(.plain)
+            TextField("", text: $name)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .onSubmit(save)
+                .onChange(of: name) { _ in save() }
+            IconButton("trash") { store.deleteCategory(category.id) }
+                .foregroundStyle(.secondary)
+                .help(L("Delete"))
+        }
+        .frame(minHeight: 22)
+        .onAppear { name = category.name }
+    }
+
+    private func save() {
+        guard name.trimmingCharacters(in: .whitespaces) != category.name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        store.updateCategory(TodoCategory(id: category.id, name: name, color: category.color))
     }
 }
